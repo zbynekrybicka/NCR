@@ -4,7 +4,7 @@
 
 Zbyněk Rybička, 2026
 
-> **Poznámka k tomuto dokumentu:** Toto je pracovní verze přenesená z původního PDF (viz `docs/Nature_Cybernetic_Robots.pdf` pokud je uloženo). Dokument není hotový — chybí mimo jiné dokončení kroku robota Dula, popis scény výběru robota, menu, UI, počet a struktura levelů, art styl a ovládání kamery. Doplňuje se průběžně jako součást vývoje hry.
+> **Poznámka k tomuto dokumentu:** Toto je pracovní verze přenesená z původního PDF (viz `docs/Nature_Cybernetic_Robots.pdf` pokud je uloženo). Dokument není hotový — chybí mimo jiné dokončení kroku robota Dula, popis scény výběru robota a ovládání kamery. Hra je aktuálně v pre-alpha fázi zaměřené na funkčnost — vizuál (art styl, UI, zvuk) a téma počtu/struktury levelů se řeší až od verze 0.2.0, resp. jsou vyřešeny průběžným vznikem levelů v editoru (viz [2.2.2](#222-levely-a-jejich-původ)). Doplňuje se průběžně jako součást vývoje hry.
 
 ## Obsah
 
@@ -12,7 +12,11 @@ Zbyněk Rybička, 2026
    1. [Roboti](#11-roboti)
 2. [Scény](#2-scény)
    1. [Level](#21-level)
+      1. [Zahájení levelu](#211-zahájení-levelu)
+      2. [Klíč a cíl](#215-klíč-a-cíl)
+      3. [Podmínka ukončení levelu / restart](#216-podmínka-ukončení-levelu--restart)
    2. [Editor](#22-editor)
+      1. [Levely a jejich původ](#222-levely-a-jejich-původ)
 
 ---
 
@@ -22,7 +26,7 @@ Logická hra, ve které hráč ovládá sedm robotů, z nichž každý má jiné
 
 Cílem každé úrovně je dostat všechny přidělené roboty na dané scéně do cíle, přičemž na scéně se vždy nachází i klíč, který je třeba najít předtím, a robot, který klíč najde, musí cílem projít jako první.
 
-Každý robot má svoji hmotnost, na kterou mohou některé předměty reagovat. Při překročení maximální nosnosti se mohou rozbít (dřevěná plošina) nebo přestanou fungovat (výtah). Každý robot má možnost sbírat a držet předměty — některé všichni, některé jen někteří. Nesené předměty se přičítají do celkové hmotnosti.
+Každý robot má svoji hmotnost, na kterou mohou některé předměty reagovat. Při překročení maximální nosnosti se mohou rozbít (dřevěná plošina) nebo přestanou fungovat (výtah). Každý robot má možnost sbírat a držet předměty — některé všichni, některé jen někteří. Nesené předměty nemají vlastní hmotnost a do celkové hmotnosti robota se nepočítají; množství, které robot může nést, je místo toho omezené kapacitou jeho inventáře (viz [2.1.2](#212-řízené-prvky--roboti)).
 
 Roboti se standardně mohou pohybovat po souši. Do vody vstoupit nemohou (s výjimkou vodního, který se ve vodě chová jako ponorka). Vstoupí-li na led, sklouznou se po něm tak daleko, než přejdou na první políčko jiného povrchu nebo narazí na překážku. Pokud je na konci ledové dráhy propast, na led vstoupit nejde. Výjimkou je ledový robot, který se může po ledu pohybovat stejně jako po souši.
 
@@ -32,7 +36,7 @@ Roboti se standardně mohou pohybovat po souši. Do vody vstoupit nemohou (s vý
 
 Základní hmotnost je 2. Může odstraňovat kostky hlíny, přičemž když jednu kostku odstraní, naplní se mu korba, kterou musí následně zase jinde vyložit, jinak nemůže kopat dál. Může vyhrabat kostku přímo před sebou, pod sebou (přičemž tím se dostane na nižší úroveň) nebo která je z jeho pohledu šikmo dolů před ním. Vysypávat hlínu může pouze za sebe. Ale může se otáčet na místě, takže směr není zásadní překážka. Pokud vykope kostku, na níž jsou další kostky či jiné předměty, vše se propadne o úroveň níž. Pokud robot vyklopí korbu, kostka spadne na nejbližší pevný podklad. Lze vyklápět i do vody. Při vyklopení na led se z ní stává pevná překážka.
 
-**Akce 1 — Nahrábnutí:** Stojí-li Han před kostkou z hlíny, nebo hliněná kostka tvoří povrch jeden krok před ním, nebo stojí přímo na ní, provede nahrábnutí hliněné kostky na korbu. Tím kostku odstraní a daným místem je možné projít. Pokud nad hliněnou kostkou byly jiné kostky, které mohou spadnout (dřevo, kámen, led, další hlína...), tyto kostky spadnou. Hrabat lze pouze, pokud má Han prázdnou korbu. Pokud Han vyhrabe kostku v oblasti s mělkou vodou (do hluboké nemůže), voda ihned zaplní vyhrabanou díru a celková hladina klesne.
+**Akce 1 — Nahrábnutí:** Stojí-li Han před kostkou z hlíny, nebo hliněná kostka tvoří povrch jeden krok před ním, nebo stojí přímo na ní, provede nahrábnutí hliněné kostky na korbu. Tím kostku odstraní a daným místem je možné projít. Pokud nad hliněnou kostkou byly jiné kostky, které mohou spadnout (dřevo, kámen, led, další hlína...), tyto kostky spadnou. Hrabat lze pouze, pokud má Han prázdnou korbu. Pokud Han vyhrabe kostku v oblasti s mělkou vodou (do hluboké nemůže), voda ihned zaplní vyhrabanou díru a celková hladina klesne. Před samotným vyhrabáním se vždy kontroluje, zda přímo pod odstraňovanou kostkou nestojí jiný robot — pokud ano, nahrábnutí se neprovede.
 
 **Akce 2 — Vysypání korby:** Pokud má Han za sebou volný prostor (nestojí zády přímo u zdi), korba se vysype a vytvoří tak za sebou hliněnou kostku stejné velikosti jako předtím nabíral. Pokud Han stojí zády nad propastí, kostka spadne dolů na nejbližší pevný povrch, na který natrefí. Je možné vysypat korbu i do vody — pokud by však na místě dopadu kostky byl jiný robot, vysypání není možné. Pokud Han vysype korbu do vody, stoupne celková hladina v zatopeném prostoru; pokud by hladina měla stoupnout natolik, že by se v ní Han nebo jiný robot utopili (kromě Dula), vysypání není možné.
 
@@ -42,25 +46,25 @@ Základní hmotnost je 2. Vypadá jako cisterna s čerpadlem, disponuje i lodní
 
 **Akce 1 — Načerpání vody:** Lze provést, má-li Dul prázdnou cisternu a nachází se přímo ve vodě, nebo stojí čelem k zatopené oblasti s hladinou ve výšce maximálně půl kostky pod jeho polohou. Při načerpání klesne hladina zatopené oblasti adekvátně objemu — má-li zatopená oblast hladinu o rozloze pěti kostek, hladina klesne o jednu pětinu výšky kostky.
 
-**Akce 2 — Vypuštění cisterny:** Cisterna se vypouští směrem dozadu. Vodu lze vypustit pouze do zatopených oblastí či oblastí určených pro zatopení. Hladina zatopené oblasti stoupne adekvátně objemu jedné kostky. Pokud by zvýšení hladiny způsobilo utopení jiného robota, vypuštění se neprovede.
+**Akce 2 — Vypuštění cisterny:** Cisterna se vypouští směrem dozadu. Vodu lze vypustit pouze do zatopených oblastí či oblastí určených pro zatopení. Hladina zatopené oblasti stoupne adekvátně objemu jedné kostky. Pokud by zvýšení hladiny přesáhlo 50 % objemu dna nádrže, ve které stojí jiný robot (utonutí, viz [Voda](#214-statické-prvky--překážky)), vypuštění se neprovede.
 
-> ⚠️ *Nedokončeno v originále:* popis akce "Krok" pro Dula (specifické podmínky kroku po souši/vodě) není v PDF dopsán — je třeba doplnit.
+> ⚠️ *Nedokončeno:* krok Dula (po souši i ve vodě) se bude vyhodnocovat vlastním rozhodovacím stromem, viz [Mechanismus vyhodnocení kroku (behavior tree)](#212-řízené-prvky--roboti). Konkrétní strom pro Dula zatím není dodaný.
 
 #### 1.1.3 Ohnivý — Set
 
-Základní hmotnost je 2. Může se pohybovat po souši a po šikminách stejně jako ostatní roboti. Na rozdíl od ostatních může projít i skrze hořící oheň, aniž by mu to uškodilo. Set jako jeden ze dvou robotů (spolu s Netem, Dou a Yeem) má možnost sbírat kanystry s palivem, které může následně použít pro svoji akci. Pro ostatní roboty jsou kanystry překážkou.
+Základní hmotnost je 2. Může se pohybovat po souši a po šikminách stejně jako ostatní roboti. Na rozdíl od ostatních může projít i skrze hořící oheň, aniž by mu to uškodilo. Set je jedním ze čtyř robotů (spolu s Netem, Dou a Yeem), kteří mají možnost sbírat kanystry s palivem, které může následně použít pro svoji akci. Pro ostatní roboty jsou kanystry překážkou.
 
-**Akce 1 — Zapálení a odstranění překážky:** Vyžaduje palivo a to, aby překážka před ním byla ohněm zničitelná (dřevo nebo led, případně další materiály). Set může zničit překážku, kterou má krok před sebou vodorovně, šikmo nebo svisle (v tomto pořadí priority). Po provedení akce přijde Set o kanystr s palivem. Pokud zničí překážku, vše nad ní se propadne o úroveň níž.
+**Akce 1 — Zapálení a odstranění překážky:** Vyžaduje palivo a to, aby překážka před ním byla ohněm zničitelná (dřevo nebo led, případně další materiály; efekt zničení ledu viz [Led](#214-statické-prvky--překážky)). Set může zničit překážku, kterou má krok před sebou vodorovně, šikmo nebo svisle (v tomto pořadí priority). Po provedení akce přijde Set o kanystr s palivem. Pokud zničí překážku, vše nad ní se propadne o úroveň níž. Před samotným zničením se vždy kontroluje, zda přímo pod ničenou kostkou nestojí jiný robot — pokud ano, akce se neprovede.
 
-**Akce 2 — Odložení kanystru:** Pokud má Set u sebe nevyužitý kanystr s palivem, nechá jej za sebou, aby odlehčil svoji váhu nebo aby si ho mohl vzít kolega.
+**Akce 2 — Odložení kanystru:** Pokud má Set u sebe nevyužitý kanystr s palivem, nechá jej za sebou, aby uvolnil místo v inventáři nebo aby si ho mohl vzít kolega.
 
 #### 1.1.4 Přírodní — Net
 
 Základní hmotnost je 2. Může se pohybovat po souši stejně jako většina ostatních, nemůže do vody, ale za to může šplhat po stěnách jako brouk (vypadá jako brouk — šest nožiček místo koleček).
 
-Na stěně však nemůže zůstat viset. Před krokem představujícím šplhání po stěně se kontroluje, zda je na vrcholu stěny pevný podklad, na kterém se může usadit. Pokud stěna končí stropem, krok není možné provést. Šplhání do výšky je podmíněné maximální hmotností 4 — může tedy u sebe nést dva kanystry paliva nebo service kity. Šplhání vzhůru není možné, pokud je jedna nebo více kostek na stěně z ledu.
+Na stěně však nemůže zůstat viset. Před krokem představujícím šplhání po stěně se kontroluje, zda je na vrcholu stěny pevný podklad, na kterém se může usadit. Pokud stěna končí stropem, krok není možné provést. Šplhání do výšky je podmíněné tím, že Net nese nejvýše dva předměty (viz [Inventář](#212-řízené-prvky--roboti)). Šplhání vzhůru není možné, pokud je jedna nebo více kostek na stěně z ledu.
 
-Při šplhání směrem dolů se kontroluje, zda je možné sešplhat — stěna nesmí končit ve vzduchu ani ve vodě, pod ní musí být pevný podklad. Na šplhání dolů se nevztahuje hmotnostní limit — může slézt i se čtyřmi kanystry, ale pak už nemůže nahoru, pokud je neodhodí.
+Při šplhání směrem dolů se kontroluje, zda je možné sešplhat — stěna nesmí končit ve vzduchu ani ve vodě, pod ní musí být pevný podklad. Na šplhání dolů se nevztahuje limit počtu nesených předmětů — může slézt i se všemi čtyřmi, ale pak už nemůže nahoru, dokud je neodloží na dva nebo méně.
 
 Sám nemůže nic stavět ani bořit — jedná se o pomocníka, který umí přinést, co je potřeba.
 
@@ -72,7 +76,7 @@ Sám nemůže nic stavět ani bořit — jedná se o pomocníka, který umí př
 
 Základní hmotnost je 1. Vypadá jako dron. Může se pohybovat libovolně vodorovně i svisle, nemá-li před sebou překážku. Jeho limity jsou pevné překážky a hranice úrovně (nejsou vidět, ale robot skrze ně neprojde) horizontální i vertikální. Nemůže do vody. Rovněž nesmí zůstat ve vzduchu, pokud jej chcete vyměnit — pro výměnu je nutné nejprve přistát.
 
-Může sebrat jeden předmět, avšak musí na něj naletět shora — pokud by byl předmět pod nízkým stropem, naložit jej nemůže. Maximální nesená hmotnost je 2.
+Může sebrat jeden předmět (viz [Inventář](#212-řízené-prvky--roboti)), avšak musí na něj naletět shora — pokud by byl předmět pod nízkým stropem, naložit jej nemůže; ze strany je pro Da předmět překážkou.
 
 **Akce 1:** Da neprovádí.
 
@@ -90,9 +94,9 @@ Základní hmotnost je 2. Nosí chladicí těleso jako hlavici. Po souši se mů
 
 Základní hmotnost je 2. Inspirovaný astrodroidem R2-D2, disponuje pájecím zařízením a USB přípojkou. Může se pohybovat po souši stejně jako většina ostatních, nemůže do vody. Po ledu klouže.
 
-**Akce 1 — Interakce se zařízením:** Pokud stojí před elektrickým zařízením a napojí se na něj, hráč přebírá kontrolu nad daným zařízením. Il jako jediný může elektrická zařízení ovládat.
+**Akce 1 — Interakce se zařízením:** Pokud stojí před funkčním elektrickým zařízením a napojí se na něj, hráč přebírá kontrolu nad daným zařízením. Il jako jediný může elektrická zařízení ovládat. Je-li zařízení před ním rozbité, nelze nad ním kontrolu převzít — pokud má Il u sebe service kit, Akce 1 místo toho provede opravu (viz Akce 2 níže); po úspěšné opravě se kit spotřebuje a další provedení Akce 1 nad stejným zařízením už znamená standardní převzetí kontroly.
 
-**Akce 2 — Odložení service kitu:** Il může sbírat service kity a jako jediný jimi opravovat rozbitá elektrická zařízení (po úspěšné opravě se kit spotřebuje). Akce 2 slouží k odložení neseného service kitu, většinou za účelem snížení celkové hmotnosti.
+**Akce 2 — Odložení service kitu:** Il může sbírat service kity, které využívá k opravě rozbitých elektrických zařízení (viz Akce 1). Akce 2 slouží k odložení neseného service kitu, většinou za účelem uvolnění místa v inventáři. Kontrolu nad převzatým zařízením hráč rovněž opouští pomocí Akce 2 a vrací se tak zpět k ovládání Ila.
 
 ---
 
@@ -102,7 +106,17 @@ Základní hmotnost je 2. Inspirovaný astrodroidem R2-D2, disponuje pájecím z
 
 #### 2.1.1 Zahájení levelu
 
-> ⚠️ *Nedokončeno v originále* — potřeba doplnit (např. intro/úvodní stav levelu, výchozí kamera, cutscény?).
+Level se zahajuje načtením informací o levelu ze souboru (viz [Formát uložení levelu](#222-levely-a-jejich-původ)). Podle nich se umístí všechny prvky, které scéna obsahuje, na své pozice — včetně robotů. Kamera se poté zaměří na prvního aktivního robota; pořadí/identita prvního aktivního robota je rovněž součástí definice levelu.
+
+> ⚠️ *Nedokončeno:* případné intro/cutscény při zahájení levelu nejsou řešeny.
+
+**Kamera**
+
+Kamera se vždy dívá směrem k aktuálně aktivnímu robotovi — při výměně aktivního robota (viz [Ovládání robotů](#212-řízené-prvky--roboti)) se přepne i cílový bod kamery na nově aktivního robota.
+
+Hráč může kamerou kolem aktivního robota otáčet pomocí myši, a to jak vodorovně, tak svisle, a přibližovat/oddalovat ji kolečkem myši. Kamera se nesmí dostat do kolize s kostkami levelu — nikdy nesmí projít skrz žádnou kostku.
+
+Kameru lze dočasně přepnout do režimu **first person**, ve kterém hráč vidí scénu přímo z pohledu robota (přesně to, co má robot před sebou). Tento režim se hodí typicky v situacích, kdy robot vstupuje do uzavřených či jinak špatně přehledných prostor.
 
 #### 2.1.2 Řízené prvky – roboti
 
@@ -110,7 +124,21 @@ Základní hmotnost je 2. Inspirovaný astrodroidem R2-D2, disponuje pájecím z
 
 Každý robot může provádět až čtyři různé úkony: otočení, krok vpřed a dvě akce specifické pro každého robota. Aktivní je vždy jeden robot a v předem dané sekvenci je možné vybírat mezi jednotlivými roboty, kteří se nachází na scéně.
 
+**Přepínání aktivního robota**
+
+Roboti na scéně mají pevné, stále se opakující pořadí (definované levelem, viz [Zahájení levelu](#211-zahájení-levelu)). Klávesou Tab (mapování konfigurovatelné) se aktivní robot posune na dalšího v této sekvenci; po posledním robotovi se sekvence vrací na prvního.
+
+Součástí UI scény je i možnost přímého výběru — kliknutím na konkrétního robota (jeho ikonu/reprezentaci v UI) se tento robot stane aktivním bez ohledu na pořadí v sekvenci.
+
+Přepnutí (ať už přes Tab, nebo kliknutím) je podmíněné tím, že aktuálně aktivní robot je v bezpečí — přepnutí se neprovede, pokud by aktivní robot zůstal ve stavu, kde by mohl dojít k jeho zničení, kdyby byl ponechán bez zásahu hráče. Konkrétně se to týká robota Da: ten musí být přistálý na pevném podkladu, nemůže zůstat viset ve vzduchu. Pokud se hráč pokusí přepnout pryč z Da ve chvíli, kdy je ve vzduchu, přepnutí se odmítne a Da zůstává aktivní.
+
+> ⚠️ *Nedokončeno:* obecná podmínka "robot je v bezpečí" je zatím specifikovaná jen pro Da (vznášení se ve vzduchu). Až budou doplněné behavior tree ostatních robotů, je třeba ověřit, zda i u nich existuje obdobný nestabilní mezistav, který by měl přepnutí blokovat (typicky Net na stěně během šplhání?).
+
 Otáčet se mohou všichni roboti neomezeně. Při provádění kroku vpřed i akcí je vždy třeba vyhodnotit, zda daný robot má možnost daný úkon provést a zda jsou splněné příslušné podmínky.
+
+**Inventář**
+
+Každý robot může nést až čtyři předměty současně, s výjimkou Da, který nese jen jeden. Má-li robot plný inventář, další předmět, na jehož políčko by vstoupil, se pro něj chová jako překážka — musí nejdřív nějaký nesený předmět odložit (viz Akce 2 u jednotlivých robotů, kde je definovaná). Robot Net může šplhat směrem vzhůru pouze tehdy, má-li u sebe nejvýše dva předměty; s více předměty může už jen sešplhat dolů (viz [1.1.4 Net](#114-přírodní--net)).
 
 Robot se nemůže rozbít ani pokazit — pokud by jakýkoli krok či akce představovaly jeho zničení, úkon se neprovede. Kromě vodního robota nemůže žádný robot do hluboké vody. Žádný robot kromě létajícího nesnese pád z výšky. Žádný robot kromě přírodního nemůže šplhat po stěnách (a i ten má šplhání omezené jen na ideální podmínky popsané výše).
 
@@ -119,27 +147,41 @@ Základní úkony:
 - **Vlevo vbok** – robot se otočí přesně o 90° vlevo
 - **Vpravo vbok** – robot se otočí přesně o 90° vpravo
 - **Čelem vzad** – robot se otočí přesně o 180°
-- **Krok** – provede se kontrola, zda je možné krok provést, a je-li to možné, krok se provede. Není-li stanoveno jinak (viz jednotlivý robot výše), krok se vyhodnocuje následovně:
-
-  *Podmínky pro provedení kroku:*
-  - Je-li prostor před robotem prázdný.
-  - Je-li v prostoru pod cílovou pozicí pevný podklad nebo šikmina.
-  - Je-li před robotem šikmina, je třeba vyhodnotit i následující pozici o kostku vpřed a jednu úroveň výš.
-  - Je-li v prostoru pod cílovou pozicí šikmina, je třeba vyhodnotit i následující pozici; je-li podkladem na cílové pozici opět šikmina, kontrola se provádí opakovaně, dokud nenarazí na jiný objekt.
-  - Vede-li cesta tvořená šikminami do hluboké vody, podmínka pro krok není splněná.
-  - Je-li podklad před robotem ledový, vyhodnocují se i další podklady v cestě, dokud je prostor před robotem volný a podklad ledový. Narazí-li na jiný než ledový podklad, na který může vstoupit, nebo narazí na pevnou překážku, krok se provede. Narazí-li na prostor bez pevného podkladu, krok provést nelze.
-
-  *Provedení kroku:*
-  - Robot se posune směrem, kterým je natočený, o vzdálenost jedné kostky.
-  - Je-li robot před šikminou, projde celou cestu tvořenou šikminami a zastaví se až za nimi.
-  - Je-li podklad ledový, robot klouže po celé ledové cestě jako jeden krok a nemůže během klouzání měnit směr.
-
+- **Krok** – provedení kroku (a případných navazujících dílčích kroků) se vyhodnocuje mechanismem popsaným níže, viz *Mechanismus vyhodnocení kroku (behavior tree)*.
 - **Akce 1** – akce specifická pro každého robota, je-li definovaná.
 - **Akce 2** – jiná akce specifická pro každého robota, je-li definovaná.
 
 *(Popisy jednotlivých robotů viz [1.1 Roboti](#11-roboti).)*
 
+**Mechanismus vyhodnocení kroku (behavior tree)**
+
+Krok robota (a obecně jakýkoli jeho pohyb v mřížce, včetně specifických případů jako pohyb Dula ve vodě) se vyhodnocuje pomocí behavior tree. Každý robot má vlastní strom odrážející jeho pohybové schopnosti — dodá je autor ručně, viz poznámka níže.
+
+Kolem robota jsou umístěné raycasty, kterými strom při průchodu kontroluje obsah okolních kostek — typicky kostku před robotem, kostku pod ním a kostku, na kterou by měl robot následně vstoupit.
+
+Souběžně s průchodem stromem se plní fronta dílčích kroků. Jeden krok hráče se totiž může skládat z více dílčích kroků (např. sjetí po sérii šikmin nebo skluz po ledu). Dílčí kroky jsou kódované čísly:
+
+| Kód | Význam |
+|---|---|
+| `0` | Jeden krok vpřed bez další změny výšky |
+| `1` | Krok vpřed a nahoru (po šikmině) |
+| `2` | Krok svisle nahoru |
+| `-1` | Krok vpřed a dolů (po šikmině) |
+| `-2` | Krok svisle dolů |
+
+Průchod stromem vrací jeden ze tří stavů:
+
+- **SUCCESS** – provede se celá sekvence dílčích kroků nashromážděná ve frontě.
+- **FAIL** – krok se neprovede vůbec, fronta se zahodí.
+- **RUNNING** – kontrolní raycasty se posunou o právě zamýšlené dílčí kroky (ty se přidají do fronty) a vyhodnocení stromu proběhne znovu z nové pozice. To se může opakovat vícekrát, dokud vyhodnocení neskončí stavem SUCCESS nebo FAIL.
+
+> ⚠️ *Nedokončeno:* konkrétní rozhodovací stromy jednotlivých robotů (jaké podmínky vedou k SUCCESS/FAIL/RUNNING a jaké dílčí kroky se přitom přidávají do fronty) dodá autor ručně, doplní se postupně mimo/do tohoto dokumentu.
+>
+> Obdobný rozhodovací mechanismus (ne nutně stejný behavior tree jako u kroku, ale analogická sada podmínek) bude potřeba i pro některé akce, ne jen pro krok samotný — typicky pro Akci 1 Hana a Seta, kde je třeba před zničením/odebráním kostky ověřit, zda pod ní nestojí jiný robot (viz [1.1.1 Han](#111-zemní--han) a [1.1.3 Set](#113-ohnivý--set)). Konkrétní podobu tohoto rozhodování dodá autor ručně stejně jako u kroku.
+
 #### 2.1.3 Interaktivní prvky – ostatní předměty
+
+**Sebrání předmětu** — Robot sebere předmět automaticky tím, že na jeho políčko vstoupí (nevyžaduje samostatnou akci), pokud pro daný typ předmětu a robota není uvedeno jinak. Výjimkou je Da, který musí na předmět naletět shora — ze strany je pro něj předmět překážkou (viz [1.1.5 Da](#115-létající--da)). Kapacita inventáře je popsaná v [2.1.2](#212-řízené-prvky--roboti).
 
 **Palivo** — Předmět, který mohou sbírat roboti Set, Net, Da a Yeo, aby mohli provést svou akci (spálení, zmražení) nebo aby jej mohli doručit na jiné místo. Pro ostatní roboty je předmět překážkou, přes kterou nemohou přejít. Použitím (Set, Yeo) palivo zaniká.
 
@@ -147,7 +189,7 @@ Základní úkony:
 
 #### 2.1.4 Statické prvky – překážky
 
-**Zeď** — Neprůchodná a nezničitelná překážka (beton nebo ocel). Je-li zeď o úroveň níže než robot, je možné na ni vstoupit jako na vyvýšený povrch.
+**Zeď** — Kostka tvořící neprůchodnou a nezničitelnou překážku (beton nebo ocel); nelze ji nijak přesunout ani zničit. Robotům ve stejné výšce, v jaké zeď je, brání v průchodu. Robot o úroveň výš se může po horním povrchu zdi normálně pohybovat, tj. může na něj vstoupit jako na kterýkoli jiný pevný povrch.
 
 **Okraj levelu** — Level je kvádr, přísně ohraničený prostor; za jeho hranice se nelze dostat žádným způsobem.
 
@@ -157,9 +199,25 @@ Základní úkony:
 
 **Kámen** — Nezničitelná překážka. Na rozdíl od zdi reaguje na gravitaci — pokud se prostor pod ní uvolní, posune se o úroveň níž. Stojí-li na zdi nebo na nejnižší úrovni levelu, chová se identicky se zdí.
 
-**Led** — Ve stejné úrovni jako robot se chová jako zeď. Je-li robot o úroveň výš, může na led vstoupit, ale sklouzne po něm (klouzání = jeden krok, nelze měnit směr, končí-li cesta pádem, vstup není možný). Set jej může roztavit svou akcí 1 (zmizí zcela, i voda). Yeo jej může vytvářet svou akcí 1 ze zmrzlé vody a jako jediný se po ledu pohybuje bez omezení.
+**Led** — Ve stejné úrovni jako robot se chová jako zeď. Je-li robot o úroveň výš, může na led vstoupit, ale sklouzne po něm (klouzání = jeden krok, nelze měnit směr, končí-li cesta pádem, vstup není možný). Yeo jej může vytvářet svou akcí 1 ze zmrzlé vody a jako jediný se po ledu pohybuje bez omezení.
+
+Ledové kostky nelze umístit mimo nádrž (viz [Umístění objektů](#221-ovládací-panel)) — v levelu vždy existují jen jako zmrzlá voda uvnitř zatopené oblasti. Chceme-li zničitelnou překážku pro Seta mimo vodu, použije se dřevo. Roztaje-li Set ledovou kostku svou akcí 1, kostka zmizí a v dané nádrži se to projeví stejně, jako by tam Dul vypustil plnou cisternu (hladina stoupne o objem odpovídající jedné kostce, včetně kontroly na utonutí, viz [Voda](#214-statické-prvky--překážky) a [Akce 2 — Vypuštění cisterny](#112-vodní--dul)).
 
 **Voda** — Zatopené oblasti (nádrže) s danou kapacitou. Je-li v nádrži méně vody než polovina objemu dna, mohou do ní vstoupit všichni roboti (voda sahá max. po pás). Je-li vody více, může do nádrže pouze Dul. Je-li nádrž plná nebo blízko plná (méně místa než polovina kostek tvořících hladinu), Dul může vstoupit ze břehu i čerpat ze břehu; jinak musí použít šikminu nebo výtah. Nádrž s neomezenou kapacitou nemění hladinu při čerpání/napouštění. Šikmina počítá do kapacity nádrže jako půl kostky.
+
+**Maximální bezpečná hladina (utonutí).** Žádný robot kromě Dula nesmí být v situaci, kdy by mu voda sahala výš než po pás, tj. hladina nádrže, ve které stojí, přesahuje 50 % objemu dna — takový stav se považuje za utonutí a nesmí nastat. Toto omezení platí univerzálně pro jakýkoli způsob, kterým se hladina může zvýšit, ať už jde o krok robota do nádrže, vysypání korby (Han), vypuštění cisterny (Dul), roztavení ledu (Set), nebo automatické čerpadlo ovládané elektrickou skříní/řídicí jednotkou (viz [Nádrže a čerpadla](#221-ovládací-panel)). Kdykoli by daný úkon vedl k tomu, že by v nádrži s jiným robotem (kromě Dula) hladina po jeho provedení přesáhla 50 % objemu dna, úkon se neprovede.
+
+#### 2.1.5 Klíč a cíl
+
+**Klíč** — Interaktivní předmět, který lze sebrat. Nemá žádnou hmotnost a pro žádného robota nepředstavuje žádné jiné omezení (nijak neomezuje pohyb ani nosnost). V každém levelu je vždy přesně jeden klíč — ani víc, ani méně.
+
+**Cíl** — Kostka, do které se musí dostat všichni roboti přidělení danému levelu. Cíl je zpočátku zamčený a je neprůchodný. Odemyká se tak, že jej klíčem projde robot, který klíč sebral — tento robot tedy musí cílem projít jako první. Teprve po odemčení mohou cílem projít i ostatní roboti.
+
+#### 2.1.6 Podmínka ukončení levelu / restart
+
+Hra neobsahuje klasickou "prohru" ve smyslu game over. Robot nemůže provést krok ani akci, které by vedly k jeho zničení — pokud by daný úkon vedl ke zničení, mechanismus vyhodnocení kroku (behavior tree, viz [2.1.2](#212-řízené-prvky--roboti)) jej vyhodnotí jako neproveditelný a úkon se vůbec neprovede.
+
+Jediný způsob, jak level "prohrát", je, že hráč dospěje do stavu, ze kterého už není možné najít řešení — buď proto, že řešení reálně nenašel, nebo udělal nevratnou chybu, která správné řešení znemožnila. V takovém případě hráč sám vyvolá restart levelu z menu; hra sama takový stav nedetekuje ani jej nijak nevynucuje.
 
 ### 2.2 Editor
 
@@ -171,11 +229,17 @@ Základní úkony:
 
 **Nastavení objektu** — Každý objekt má vlastní nastavitelné vlastnosti. Hra je založená na grafické rozmanitosti — každému objektu (kromě robotů, kteří jsou vždy stejní) se přiřazuje model z dostupné knihovny. Každý objekt lze natočit do jednoho z šesti směrů, se zachováním smysluplnosti (např. šikminu nelze umístit svisle). Elektrické skříně a řídicí jednotky lze ovládat jen z jednoho směru — dostat se k nim ze správného směru může být samostatná hádanka. Elektrické skříně lze nastavit jako defaultně funkční/nefunkční (vyžadující opravu). Řídicí jednotky lze nastavit jako tlačítko nebo přepínač.
 
-**Transportní plošiny** — Skládají se ze série zdí. Definuje se, které objekty jsou součástí plošiny (nemusí být fyzicky u sebe) a mezi kterými dvěma polohami se pohybuje. Plošina musí být napojená alespoň na jednu elektrickou skříň a má definovaný hmotnostní limit pro uvedení do pohybu. Napojením na ovládací zařízení se stává manuální. Editor musí kontrolovat, že dráha plošiny neprochází skrz jiné statické objekty, i při plném vytížení.
+**Transportní plošiny** — Skládají se ze série zdí. Definuje se, které objekty jsou součástí plošiny (nemusí být fyzicky u sebe) a mezi kterými dvěma polohami se pohybuje. Plošina musí být napojená alespoň na jednu elektrickou skříň a má definovaný hmotnostní limit pro uvedení do pohybu. Je-li napojená pouze na elektrickou skříň (bez řídicí jednotky), pohybuje se automaticky podle nastaveného hmotnostního limitu — jakmile je limit splněn, plošina se sama uvede do pohybu. Napojením i na řídicí jednotku (tlačítko/přepínač) se stává manuální a pohyb spouští hráč přes Ila (viz [1.1.7 Il](#117-elektrický--il)), byť limit nosnosti platí i tak. Editor musí kontrolovat, že dráha plošiny neprochází skrz jiné statické objekty, i při plném vytížení.
 
 **Nádrže a čerpadla** — Tvar a kapacita nádrže se odvozuje ze sestavy zdí, které ji ohraničují (nádrž nelze umístit volně). Lze nastavit kapacitu jako neomezenou (hladina se pak nikdy nemění a nelze z ní čerpat). Čerpadlo se definuje označením dvou nádrží (vzdálenost neomezená, model nepovinný), napojuje se na elektrickou skříň a případně řídicí jednotku; definuje se defaultní zdrojová/cílová nádrž, resp. defaultní směr u obousměrného čerpadla.
 
 **Umístění robotů** — Do levelu lze umístit 1 až 7 robotů dle výběru, včetně pozice a směru. Umístění je možné pouze na zem nebo plochou zeď; Dul může být umístěn i ve vodě.
+
+#### 2.2.2 Levely a jejich původ
+
+Od verze 0.1.0 je editor součástí hry. Levely do oficiální hry nejsou dodávány předem navrženou sadou — vznikají v editoru (autorem nebo přáteli) a z takto vytvořených levelů se následně vybírají ty, které se stanou součástí oficiální hry. Počet a struktura levelů proto nejsou v této fázi vývoje relevantní a nejsou touto specifikací určovány.
+
+**Formát uložení levelu** — Level (sestava kostek a předmětů, počáteční pozice robotů, propojení elektrických zařízení) se ukládá v binárním formátu, aby nebyl snadno editovatelný mimo editor. Konkrétní bajtová struktura a verzování formátu nejsou předmětem tohoto dokumentu.
 
 ---
 
@@ -183,13 +247,12 @@ Základní úkony:
 
 Seznam částí, které dokument v aktuální podobě neřeší a je třeba je doplnit průběžně s vývojem:
 
-- [ ] Dokončit popis kroku (pohybu) robota Dula po souši/vodě.
-- [ ] Zahájení levelu — co přesně se děje při startu (kamera, intro).
-- [ ] Scéna výběru/přepínání aktivního robota (UI, sekvence).
-- [ ] Menu, UI během hraní (indikátory hmotnosti, inventáře, palivo...).
-- [ ] Podmínky prohry / restart levelu (existuje vůbec stav "prohry", nebo jen postup?).
-- [ ] Počet a struktura levelů, progrese, ukládání postupu.
-- [ ] Art styl, kamera (izometrie? volná 3D kamera?), zvuk.
-- [ ] Přesná definice "klíče" a cíle — vizuál, umístění, více klíčů na scéně?
-- [ ] Definice sad materiálů zničitelných ohněm nad rámec dřeva a ledu.
-- [ ] Formát ukládání levelů (pro editor i runtime) — souborový formát, verzování.
+- [ ] Doplnit konkrétní rozhodovací strom (behavior tree) pro krok robota Dula po souši/vodě (mechanismus vyhodnocení je definovaný v [2.1.2](#212-řízené-prvky--roboti), samotné stromy jednotlivých robotů dodá autor postupně).
+- [ ] Doplnit konkrétní rozhodovací stromy jednotlivých robotů pro krok obecně (viz [2.1.2](#212-řízené-prvky--roboti)) — dodá autor postupně.
+- [ ] Doplnit rozhodovací logiku pro Akci 1 Hana a Seta (kontrola robota pod ničenou/odebíranou kostkou, viz [2.1.2](#212-řízené-prvky--roboti), [1.1.1 Han](#111-zemní--han), [1.1.3 Set](#113-ohnivý--set)) — dodá autor.
+- [ ] Zahájení levelu — případné intro/cutscény (základní postup načtení a kamera už jsou popsané v [2.1.1](#211-zahájení-levelu)).
+- [ ] Scéna výběru/přepínání aktivního robota — logika (sekvence, klávesa Tab, klik v UI, podmínka bezpečí) je popsaná v [2.1.2](#212-řízené-prvky--roboti); vizuální stránka (podoba UI panelu s roboty) řešena až v 0.2.0.
+- [ ] Ověřit podmínku "robot je v bezpečí" pro přepnutí i u ostatních robotů (viz poznámka u Da v [2.1.2](#212-řízené-prvky--roboti)) — až budou doplněné jejich behavior tree.
+- [ ] Konkrétní bajtová struktura a verzování binárního formátu levelu (viz [2.2.2](#222-levely-a-jejich-původ)) — až bude aktuální pro implementaci editoru/runtime.
+
+> Poznámka: Vizuál (art styl, UI, zvuk, grafické zpracování) je záměrně mimo scope této fáze dokumentu — řeší se až od verze 0.2.0.
