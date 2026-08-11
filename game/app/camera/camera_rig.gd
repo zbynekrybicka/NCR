@@ -71,7 +71,7 @@ func _clamp_to_grid(from: Vector3, to: Vector3) -> Vector3:
 	for i in range(1, steps + 1):
 		var point := from.lerp(to, float(i) / float(steps))
 		var cell := Vector3i(floori(point.x), floori(point.y), floori(point.z))
-		if not world.is_inside(cell) or world.is_solid_at(cell):
+		if world.is_inside(cell) and world.is_solid_at(cell):
 			return previous
 		previous = point
 	return to
