@@ -120,7 +120,7 @@ static func _check_floating(level: LevelData, problems: Array) -> void:
 		if not level.is_inside(item.cell):
 			_fail(problems, "V5", "předmět na %s je mimo level" % item.cell)
 			continue
-		var below := item.cell + GridTypes.DOWN_VECTOR
+		var below: Vector3i = item.cell + GridTypes.DOWN_VECTOR
 		var below_block := GridTypes.BlockType.OUTSIDE if not level.is_inside(below) \
 				else level.block_at(below)
 		if not GridTypes.is_solid(below_block):
