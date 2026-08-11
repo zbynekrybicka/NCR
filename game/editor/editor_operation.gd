@@ -115,6 +115,116 @@ class PlaceRobot extends EditorOperation:
 		return "umístění robota %s" % GridTypes.robot_name(kind)
 
 
+## Umístění robota na konec pořadí; existuje-li už v levelu, přesune ho.
+## Na rozdíl od PlaceRobot rovnou přečísluje sequence_index všech robotů
+## podle jejich pořadí v poli, takže sekvence zůstává platnou permutací
+## (V12) i po přidání/přesunu v editoru bez ručního zásahu.
+class PlaceRobotAppend extends EditorOperation:
+	var kind: int
+	var cell: Vector3i
+	var facing: int
+	var _had_previous: bool = false
+	var _previous: LevelData.RobotPlacement = null
+	var _old_sequence: Dictionary = {} # kind -> sequence_index před operací
+
+	func _init(p_kind: int, p_cell: Vector3i, p_facing: int = 0) -> void:
+		kind = p_kind
+		cell = p_cell
+		facing = p_facing
+
+	func apply(level: LevelData) -> void:
+		_old_sequence.clear()
+		for r in level.robots:
+			_old_sequence[r.kind] = r.sequence_index
+		_had_previous = false
+		for i in range(level.robots.size() - 1, -1, -1):
+			if level.robots[i].kind == kind:
+				_had_previous = true
+				_previous = level.robots[i].duplicate_placement()
+				level.robots.remove_at(i)
+				break
+		level.robots.append(LevelData.RobotPlacement.new(kind, cell, facing, 0))
+		_renumber(level)
+
+	func revert(level: LevelData) -> void:
+		for i in range(level.robots.size() - 1, -1, -1):
+			if level.robots[i].kind == kind:
+				level.robots.remove_at(i)
+		if _had_previous:
+			level.robots.append(_previous.duplicate_placement())
+		for r in level.robots:
+			if _old_sequence.has(r.kind):
+				r.sequence_index = _old_sequence[r.kind]
+
+	func _renumber(level: LevelData) -> void:
+		for i in level.robots.size():
+			level.robots[i].sequence_index = i
+
+	func describe() -> String:
+		return "umístění robota %s" % GridTypes.robot_name(kind)
+
+
+## Odebrání robota daného druhu; přečíslovává sekvenci stejně jako
+## PlaceRobotAppend (V12 zůstává splněné).
+class RemoveRobotRenumber extends EditorOperation:
+	var kind: int
+	var _removed: LevelData.RobotPlacement = null
+	var _old_sequence: Dictionary = {}
+
+	func _init(p_kind: int) -> void:
+		kind = p_kind
+
+	func apply(level: LevelData) -> void:
+		_old_sequence.clear()
+		for r in level.robots:
+			_old_sequence[r.kind] = r.sequence_index
+		_removed = null
+		for i in range(level.robots.size() - 1, -1, -1):
+			if level.robots[i].kind == kind:
+				_removed = level.robots[i].duplicate_placement()
+				level.robots.remove_at(i)
+				break
+		_renumber(level)
+
+	func revert(level: LevelData) -> void:
+		if _removed != null:
+			level.robots.append(_removed.duplicate_placement())
+		for r in level.robots:
+			if _old_sequence.has(r.kind):
+				r.sequence_index = _old_sequence[r.kind]
+
+	func _renumber(level: LevelData) -> void:
+		for i in level.robots.size():
+			level.robots[i].sequence_index = i
+
+	func describe() -> String:
+		return "odebrání robota %s" % GridTypes.robot_name(kind)
+
+
+## Odebrání předmětu na dané buňce (pokud tam nějaký leží).
+class RemoveItem extends EditorOperation:
+	var cell: Vector3i
+	var _removed_type: int = GridTypes.NO_ITEM
+
+	func _init(p_cell: Vector3i) -> void:
+		cell = p_cell
+
+	func apply(level: LevelData) -> void:
+		_removed_type = GridTypes.NO_ITEM
+		for i in range(level.items.size() - 1, -1, -1):
+			if level.items[i].cell == cell:
+				_removed_type = level.items[i].item_type
+				level.items.remove_at(i)
+				break
+
+	func revert(level: LevelData) -> void:
+		if _removed_type != GridTypes.NO_ITEM:
+			level.items.append(LevelData.ItemPlacement.new(_removed_type, cell))
+
+	func describe() -> String:
+		return "odebrání předmětu na %s" % cell
+
+
 ## Přesun klíče.
 class MoveKey extends EditorOperation:
 	var cell: Vector3i

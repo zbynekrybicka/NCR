@@ -13,7 +13,12 @@ var hud: Hud
 var input_locked: bool = false
 
 func setup(level: LevelData) -> void:
-	simulation = Simulation.new(level)
+	setup_with_simulation(Simulation.new(level))
+
+## Použije se, když už simulace existuje (např. náhled z editoru běží nad
+## kopií editovaných dat — §16.1).
+func setup_with_simulation(p_simulation: Simulation) -> void:
+	simulation = p_simulation
 
 	view = WorldView.new()
 	add_child(view)
