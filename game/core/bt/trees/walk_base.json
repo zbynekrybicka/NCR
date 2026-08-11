@@ -1,0 +1,61 @@
+{
+  "name": "walk_base",
+  "comment": "Sdílený základ chůze (technický design §7.6.0). Používají Han, Set, Il a Dul po souši.",
+  "root": {
+    "type": "selector",
+    "children": [
+      {
+        "type": "sequence",
+        "comment": "led — RUNNING smyčka, robot sklouže celou plochu jako jeden krok",
+        "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_below_is_ice"},
+          {"type": "emit_continue", "substep": 0, "mode": "slide"}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "konec skluzu o překážku — nashromážděná fronta se provede (design dok. §2.1.4)",
+        "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["slide"]},
+          {"type": "condition", "predicate": "ahead_is_passable", "expect": false},
+          {"type": "succeed"}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "šikmina nahoru",
+        "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "ahead_is_ramp_facing_me"},
+          {"type": "condition", "predicate": "ahead_above_is_passable"},
+          {"type": "emit", "substep": 1}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "šikmina dolů",
+        "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_below_is_ramp_facing_away"},
+          {"type": "condition", "predicate": "ahead_below_free_for_robot"},
+          {"type": "emit", "substep": -1}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "rovná chůze — vylučovací podmínka na led, jinak kolize s větví led",
+        "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_below_is_solid"},
+          {"type": "condition", "predicate": "ahead_below_is_ice", "expect": false},
+          {"type": "emit", "substep": 0}
+        ]
+      },
+      {"type": "fail"}
+    ]
+  }
+}

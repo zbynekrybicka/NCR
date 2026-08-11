@@ -1,0 +1,20 @@
+; Nature Cybernetic Robots — Godot projekt
+; Vstupní akce se registrují za běhu v app/input/input_actions.gd (§17.4),
+; aby byly přemapovatelné a nemusely žít v tomto souboru.
+
+config_version=5
+
+[application]
+
+config/name="Nature Cybernetic Robots"
+config/description="Logická 3D puzzle hra se sedmi roboty na krychlové mřížce."
+run/main_scene="res://app/scenes/main.tscn"
+config/features=PackedStringArray("4.3")
+
+[debug]
+
+gdscript/warnings/untyped_declaration=1
+
+[rendering]
+
+renderer/rendering_method="mobile"

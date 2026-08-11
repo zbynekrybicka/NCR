@@ -219,6 +219,7 @@ class_name WorldState extends RefCounted
 
 var size: Vector3i
 var blocks: PackedByteArray           # mutovatelná kopie
+var orientations: PackedByteArray     # mutovatelná kopie (natočení šikmin)
 var robots: Array[RobotState]
 var active_robot_index: int
 var robot_sequence: Array[int]        # pořadí přepínání
@@ -420,7 +421,21 @@ Predikáty pro `Condition` jsou pojmenované a registrované v jedné tabulce (`
 
 ### 7.5 Formát uložení stromů
 
-Stromy se ukládají jako Godot `Resource` (`.tres`) v `core/bt/trees/`, jeden soubor na robota (`han.tres`, `dul.tres`, …). Textový `.tres` je čitelný i v diffu a editovatelný v Godot inspektoru.
+Stromy se ukládají jako **JSON** v `core/bt/trees/`. Soubor nese jeden strom jako vnořené slovníky (`{"type": "sequence", "children": [...]}`); uzly a predikáty se odkazují jménem podle tabulek v [§7.4](#74-knihovna-uzlů).
+
+> **Změna proti původnímu návrhu (`.tres`).** Ruční psaní `.tres` s vnořenými resources je křehké a mimo Godot inspektor se špatně kontroluje; JSON nese tatáž data, dá se validovat samostatným testem ([§18](#18-testovací-strategie)) a čte se v diffu stejně dobře. Požadavek P7 (pravidla jsou data, ne kód) zůstává splněný.
+
+Souborů je pět, ne sedm — sdílený základ chůze ([§7.6.0](#7600-sdílený-základ-chůze-han-set-il-dul-po-souši)) je jeden soubor, ne čtyři kopie:
+
+| Soubor | Kdo ho používá |
+|---|---|
+| `walk_base.json` | Han, Set, Il, Dul po souši |
+| `walk_yeo.json` | Yeo |
+| `net.json` | Net (základ chůze + šplhání) |
+| `da.json` | Da (vodorovný let) |
+| `dul_swim.json` | Dul ve vodě |
+
+**Režim smyčky (`mode`).** Strom se po každém `RUNNING` vyhodnocuje znovu od kořene z posunuté sondy, takže z pozice samotné nejde poznat, jestli jde o začátek kroku, nebo o pokračování skluzu/šplhání. Uzel `EmitAndContinue` proto nese pole `mode` (`slide`, `climb_up`, `climb_down`) a větve se gatují predikátem `mode_in`. Bez toho by Net po neúspěšném výlezu spadl do větve sešplhání místo `FAIL`.
 
 ### 7.6 Stromy jednotlivých robotů
 
@@ -1509,6 +1524,25 @@ Sloupec „stojí na" říká, které kapitoly stačí přečíst před začátk
 | M17 | Náhled z editoru, hlavní menu, restart | ručně: vytvoř → hraj → restartuj → vrať se do editoru bez ztráty dat | [§16.1](#161-architektura), [§14](#14-klíč-cíl-ukončení-levelu) | ☐ |
 
 Stavový sloupec se udržuje v tomto dokumentu (`☐` → `☑`), aby bylo z jediného místa vidět, co je další užitečný krok.
+
+**Aktuální stav (první implementační dávka).** Kód všech milníků M0–M15 v `core/` existuje včetně headless testů, testy ale zatím **nebyly spuštěné** (na vývojovém stroji není nainstalovaný Godot) — dokud runner neproběhne, žádný milník není podle [§20.2](#202-definice-hotového-milníku) hotový. M16 je hotový v části „čistá logika" (`LevelValidator`, `EditorSession`, undo/redo, náhled), chybí editorové UI. M17 má hotový restart, chybí menu a náhled z editoru.
+
+### 20.7 Otevřené otázky z implementace
+
+Díry, které vyplavaly až při přepisu pravidel do kódu ([§21](#21-jak-je-tento-dokument-stavěný), bod 2). Každá má v kódu provizorní řešení a komentář; **rozhodnutí patří do design dokumentu**, ne sem.
+
+| # | Otázka | Co dělá kód teď |
+|---|---|---|
+| O1 | **Hanovo vysypání do vody.** [§9.3](#93-změna-objemu) říká `+2` k objemu *a zároveň* ztrátu kapacity buňky; design dokument §1.1.1 mluví jen o ztrátě kapacity. Objem kostky se tak započítá dvakrát a hladina stoupne o dvě kostky místo jedné. | Podle §9.3 (`+2` i ztráta kapacity), protože technický design je zdroj pravdy pro implementaci. Podezření na chybu — potřebuje rozhodnout. |
+| O2 | **Geometrie šikminy.** Výstup (`Emit(1)`) končí v buňce *nad* šikminou, sestup (`Emit(-1)`) končí *v* buňce šikminy. Obě cesty fungují, ale nejsou symetrické: z buňky nad šikminou nejde krokem zpět dolů. Zároveň neplatí tvrzení §7.6.0 o vzájemné výlučnosti větví — „šikmina dolů" a „rovná chůze" se překrývají, rozhoduje pořadí v `Selectoru`. | Strom podle §7.6.0 doslova; invariant I3 dostal výjimku pro `RAMP` (robot smí stát v buňce šikminy). |
+| O3 | **První krok sešplhání Neta.** Kontrola „stěna za sondou" po prvním kroku přes hranu nikdy neprojde — stěna je v tu chvíli teprve *šikmo* za sondou. | Přidán predikát `behind_below_is_solid` jako alternativa k `behind_is_solid`. |
+| O4 | **Dulův vstup do vody a výlez z ní.** Design dokument §1.1.2 to podmiňuje tím, že hladina je ve výšce podkladu, na kterém Dul stojí. Pravidlo není nikde přepsané do podmínek stromu. | Neimplementováno (raději díra než domyšlené pravidlo). Strom plavání má navíc větev „vylezení na břeh" s podmínkou pevného podkladu, jinak by Dul vyplaval do vzduchu a porušil I5. |
+| O5 | **Konec skluzu o překážku.** Design dokument §2.1.4 říká, že robot klouže „než narazí na překážku"; §7.3 popisuje jen konec na jiném povrchu a `FAIL` nad propastí. | Přidána větev „konec skluzu o překážku": je-li vpředu neprůchodná buňka, nashromážděná fronta se provede a robot zastaví na ledu. |
+| O6 | **Splynutí nádrží za běhu.** Han může vykopat příčku mezi dvěma nádržemi. Formát i čerpadla odkazují na nádrž indexem. | Voda se slije do nádrže s nižším indexem, druhá zůstane prázdná. Chování není v žádném dokumentu. |
+| O7 | **Spouštění automatiky.** „Jakmile je limit splněn" nedefinuje, jestli se plošina hýbe opakovaně každý tah. | Náběžná hrana (`trigger_latched`) u plošin i čerpadel, jinak by kmitaly každý příkaz. |
+| O8 | **Napájení elektrické skříně.** `is_on` má stav, ale žádné pravidlo neříká, co ho mění. | Skříň bez poruchy startuje zapnutá; `DEVICE_INPUT` na přímo ovládanou skříň napájení přepíná. |
+| O9 | **Okraj levelu vůči vodě.** [§4](#4-souřadný-systém-a-konvence-mřížky) říká, že okraj se chová jako plná zeď; [§9.1](#91-identifikace-nádrží) říká, že dutina dotýkající se okraje není nádrž. | Pro pohyb je okraj zeď, pro vodu díra — nádrž musí mít vlastní dno i stěny. |
+| O10 | **`LevelValidator` v `core/`, ne v `editor/`.** Pravidla V1–V14 potřebuje i čtečka levelu ([§15](#15-formát-uložení-levelu)), a `core/` nesmí záviset na `editor/` ([§3](#3-vrstvy-a-mapa-modulů)). | Validátor leží v `core/grid/level_validator.gd`, editor ho jen volá. |
 
 ### 20.5 Kde se plán nejspíš zadrhne
 

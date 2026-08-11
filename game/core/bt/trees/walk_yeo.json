@@ -1,0 +1,38 @@
+{
+  "name": "walk_yeo",
+  "comment": "Yeo (technický design §7.6.0b): po ledu chodí jako po souši, žádná větev skluzu.",
+  "root": {
+    "type": "selector",
+    "children": [
+      {
+        "type": "sequence",
+        "comment": "šikmina nahoru",
+        "children": [
+          {"type": "condition", "predicate": "ahead_is_ramp_facing_me"},
+          {"type": "condition", "predicate": "ahead_above_is_passable"},
+          {"type": "emit", "substep": 1}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "šikmina dolů",
+        "children": [
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_below_is_ramp_facing_away"},
+          {"type": "condition", "predicate": "ahead_below_free_for_robot"},
+          {"type": "emit", "substep": -1}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "rovná chůze — ahead_below_is_solid zahrnuje led i normální zem stejně",
+        "children": [
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_below_is_solid"},
+          {"type": "emit", "substep": 0}
+        ]
+      },
+      {"type": "fail"}
+    ]
+  }
+}

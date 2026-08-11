@@ -1,0 +1,19 @@
+{
+  "name": "da",
+  "comment": "Da — vodorovný let (technický design §7.6). Předmět je vodorovně vždy překážka: Da sbírá jen shora (§12). Svislý pohyb jde mimo strom (§7.7).",
+  "root": {
+    "type": "selector",
+    "children": [
+      {
+        "type": "sequence",
+        "comment": "let vpřed",
+        "children": [
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_has_item", "expect": false},
+          {"type": "emit", "substep": 0}
+        ]
+      },
+      {"type": "fail"}
+    ]
+  }
+}

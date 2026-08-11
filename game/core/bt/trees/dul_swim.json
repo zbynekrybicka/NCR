@@ -1,0 +1,28 @@
+{
+  "name": "dul_swim",
+  "comment": "Dul ve vodě — vodorovné plavání (technický design §7.6). Bez fronty a bez RUNNING. Svislý pohyb ve vodě jde mimo strom (§7.7).",
+  "root": {
+    "type": "selector",
+    "children": [
+      {
+        "type": "sequence",
+        "comment": "plavání vpřed — cíl je taky voda",
+        "children": [
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_is_water"},
+          {"type": "emit", "substep": 0}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "vylezení na břeh — doplněno proti §7.6: bez pevného podkladu by Dul vyplaval do vzduchu a porušil invariant I5",
+        "children": [
+          {"type": "condition", "predicate": "ahead_is_passable"},
+          {"type": "condition", "predicate": "ahead_below_is_solid"},
+          {"type": "emit", "substep": 0}
+        ]
+      },
+      {"type": "fail"}
+    ]
+  }
+}
