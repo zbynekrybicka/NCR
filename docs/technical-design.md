@@ -1158,7 +1158,9 @@ var is_broken: bool
 var is_on: bool
 ```
 
-Il musí stát v sousední buňce ve směru `access_direction` a být otočený k zařízení.
+**Zařízení v mřížce.** Zařízení zabírá vlastní buňku, která se chová jako zeď (design dokument §2.2.1). Technicky to **není** vlastní `BlockType`: buňka nese obyčejný `WALL` a `DeviceDef`/`DeviceState` na ni odkazuje souřadnicí. Díky tomu se zařízení automaticky chová správně vůči všem pravidlům, která už se zdí počítají (průchodnost, gravitace, voda, chůze po vrchu), a nepřibývá typ bloku do formátu ani do tabulek v [§5.1](#51-typy-bloků). Editor při položení zařízení tuto zeď rovnou vytvoří a při smazání ji odebere ([§16.3](#163-nástroje-pro-mechanismy)).
+
+Il musí stát v sousední buňce ve směru `access_direction` a být otočený k zařízení. `access_direction` je proto vždy vodorovný (validace V15, [§16.2](#162-validační-pravidla)).
 
 Akce 1 Ila:
 - zařízení `is_broken == true` a Il má `SERVICE_KIT` → oprava, kit se spotřebuje, `DeviceRepaired`;
@@ -1178,6 +1180,8 @@ Během ovládání zařízení míří `DEVICE_INPUT` na zařízení, ne na robo
 
 Převzetí kontroly = přímé ovládání těchto vstupů, jako by je ovládala sama řídicí jednotka.
 
+**Výjimka z dělení validace/aplikace ([§6.2](#62-průběh-příkazu)).** Jestli `DEVICE_INPUT` něco udělá, závisí na stavu plošin a čerpadel napojených na ovládané zařízení, takže se to pozná až v aplikační fázi. `device_input` proto každou dílčí akci sám validuje **před** jejím provedením a vrátí neúspěch, jen když neproběhla ani jedna — v tom případě se stav nezměnil a `submit_command` hlásí `CommandRejected` jako u kteréhokoli jiného odmítnutého příkazu (P5). Nesmí nastat, aby se příkaz tvářil jako přijatý, i když se nic nestalo.
+
 ### 13.2 Transportní plošiny
 
 Design dokument i editor používají jednotně název „transportní plošina". Plošina se může pohybovat vodorovně, svisle i diagonálně: `pose_a`/`pose_b` jsou libovolné offsety, datový model žádné omezení na „jen svisle" neklade.
@@ -1193,10 +1197,14 @@ var linked_cabinets: Array[int]
 var linked_control_units: Array[int]   # prázdné → automatická plošina
 ```
 
-- **Automatická** (jen skříň): jakmile je splněný hmotnostní limit, plošina se sama uvede do pohybu.
-- **Manuální** (skříň + řídicí jednotka): pohyb spouští hráč přes Ila; limit platí i tak.
+`weight_limit` je **spouštěcí práh**, ne horní mez nosnosti (design dokument §2.2.1): `platform_can_move` odmítne přejezd, když je náklad **menší** než práh; větší náklad plošinu nikdy nezastaví. Práh platí pro obě varianty:
+
+- **Automatická** (jen skříň): rozjede se sama na náběžné hraně splnění prahu (`trigger_latched`); práh musí být ≥ 1 (V16), jinak by se rozjela hned na startu levelu.
+- **Manuální** (skříň + řídicí jednotka): pohyb spouští hráč přes Ila; práh platí i tak (práh 0 znamená „jede i prázdná").
 
 Hmotnost na plošině = součet hmotností robotů stojících na jejích buňkách (předměty se nepočítají, viz [§10](#10-specifikace-robotů)). Robot stojící na plošině se s ní posune.
+
+Členské buňky jsou zdi (design dokument §2.2.1) a smí mezi nimi být i buňka se **zařízením** — to je pevnou součástí plošiny a jede s ní. `move_platform` proto kromě bloku a orientace posune i `DeviceState.cell` každého zařízení, které v převážené buňce sedí; `access_direction` se nemění (plošina se neotáčí). Zvláštní událost pro to nevzniká: zařízení je v prezentační vrstvě obyčejná zeď, kterou překreslí `PlatformMoved` ([§17.2](#172-přehrávání-událostí)).
 
 Editor validuje, že dráha mezi `pose_a` a `pose_b` neprochází statickými objekty ani při plném vytížení (design dokument §2.2.1).
 
@@ -1208,9 +1216,14 @@ var reservoir_a: int
 var reservoir_b: int
 var bidirectional: bool
 var default_direction: int
-var linked_cabinet: int
+var linked_cabinets: Array[int]   # jedna i víc skříní, stejně jako u plošiny
 var linked_control_unit: int      # -1 → automatické
+var trigger_latched: bool         # náběžná hrana automatiky
 ```
+
+Jedno sepnutí přenese `TRANSFER_UNITS = 2` jednotky (jednu kostku vody). Čerpadlo je pod napětím, jen když jsou **všechny** napojené skříně opravené a zapnuté (design dokument §2.2.1) — tutéž funkci `cabinets_powered` používá i plošina.
+
+**Automatické čerpadlo** (bez řídicí jednotky) sepne jednou na náběžné hraně splnění všech podmínek přenosu: napájení, aspoň kostka vody ve zdroji, aspoň kostka volné kapacity v cíli a bezpečná hladina. Přesně tyhle podmínky ověřuje `pump_can_transfer`, takže automatika jen sleduje náběžnou hranu jejího výsledku (`trigger_latched`) — žádná druhá, samostatně psaná sada podmínek neexistuje.
 
 Přenos respektuje kontrolu utonutí ([§9.4](#94-kontrola-utonutí)). Nádrž s `unlimited` nikdy nemění hladinu, ať už se do ní čerpá, nebo se z ní čerpá. Editor nedovolí nastavit **čerpadlo** tak, aby čerpalo *z* nádrže s `unlimited` (do ní čerpat lze bez omezení) — to se vynucuje jako validační pravidlo editoru (V10, [§16.2](#162-validační-pravidla)). Toto omezení se týká jen čerpadel: **Dul** z `unlimited` nádrže čerpat smí (jeho akce 1 čerpadlem není), a stejně tak do ní smí vypustit cisternu — v obou případech se `volume_units` nádrže neaktualizuje.
 
@@ -1262,7 +1275,7 @@ Patička (4 B):
 | `RESV` | `u16 count`, pak `u16 anchor_x, u16 anchor_y, u16 anchor_z, u32 volume_units, u8 unlimited` |
 | `DEVC` | `u16 count`, pak `u8 kind, u8 control_mode, u16 x,y,z, u8 access_dir, u8 is_broken` |
 | `PLAT` | `u16 count`, pak `u16 cell_count`, buňky, `pose_a`, `pose_b`, `u16 weight_limit`, seznamy vazeb |
-| `PUMP` | `u16 count`, pak `u16 res_a, u16 res_b, u8 bidirectional, u8 default_dir, i16 cabinet, i16 control_unit` |
+| `PUMP` | `u16 count`, pak `u16 res_a, u16 res_b, u8 bidirectional, u8 default_dir, u16 cabinet_count`, skříně (`u16`), `i16 control_unit` |
 | `META` | volitelné: název levelu, autor, čas vytvoření (UTF-8, délkově prefixované) |
 
 **Pravidla čtečky:**
@@ -1310,13 +1323,31 @@ Editor je nesmí dovolit porušit; čtečka levelu je kontroluje znovu při nač
 | V7 | Led jen uvnitř nádrže | §2.1.4 |
 | V8 | Dráha plošiny neprochází statickými objekty ani při plném vytížení | §2.2.1 |
 | V9 | Každá plošina má ≥ 1 elektrickou skříň | §2.2.1 |
-| V10 | Čerpadlo odkazuje na dvě existující nádrže; zdrojová nádrž nesmí mít `unlimited` (cílová smí) | §2.2.1 |
+| V10 | Čerpadlo odkazuje na dvě různé existující nádrže a má ≥ 1 elektrickou skříň; zdrojová nádrž nesmí mít `unlimited` (cílová smí) | §2.2.1 |
 | V11 | Nádrž je uzavřená dutina (neteče z ní) | odvozeno z §9.1 |
 | V12 | Sekvence robotů je úplná permutace umístěných robotů | §2.1.1 |
 | V13 | Počáteční objem nádrže ≤ její kapacita | odvozeno |
 | V14 | Žádný robot nezačíná v hloubce `DEEP` (kromě Dula) | §2.1.4 |
+| V15 | Zařízení sedí ve vlastní buňce s `WALL`, má pod sebou pevný podklad, vodorovný `access_direction`, nesdílí buňku s jiným zařízením ani robotem | §2.2.1 |
+| V16 | Plošina se skládá jen ze zdí, nepřekrývá se s jinou plošinou a automatická plošina má práh ≥ 1 | §2.2.1 |
+| V17 | Vazby plošin a čerpadel míří na existující zařízení správného druhu (skříň vs. řídicí jednotka) | §2.2.1 |
 
-Zmenšení rozměrů levelu vyžaduje potvrzení a smaže zasažené objekty (design dokument §2.2.1); po smazání se validace pouští znovu.
+Zmenšení rozměrů levelu vyžaduje potvrzení a smaže zasažené objekty (design dokument §2.2.1); po smazání se validace pouští znovu. Protože se zařízení i nádrže odkazují **číslem** (plošiny, čerpadla), musí každá operace, která je odebírá, odkazy přemapovat — jinak by level zůstal nevalidní (V10, V17). Dělá to `RemoveDevice`, `RemoveReservoir` i `Resize` ([§16.3](#163-nástroje-pro-mechanismy)).
+
+### 16.3 Nástroje pro mechanismy
+
+Editor staví mechanismy ze [§13](#13-elektrická-zařízení-plošiny-čerpadla) přes `EditorOperation` stejně jako bloky — každá operace je vratná (undo, [§16.1](#161-architektura)).
+
+| Nástroj / operace | Co dělá |
+|---|---|
+| `PlaceDevice` | položí skříň/jednotku a **současně** `WALL` do téže buňky ([§13.1](#131-zařízení)); přístupový směr je aktuální orientace nástroje (klávesa R) |
+| `RemoveDevice` | odebere zařízení i jeho zeď a přečísluje vazby plošin a čerpadel |
+| `SetReservoir` | označí kotevní buňku uzavřené dutiny jako nádrž a nastaví počáteční objem a `unlimited`; klik do buňky, která už do nějaké nádrže patří, jen upraví její nastavení |
+| `RemoveReservoir` | odebere nádrž, přečísluje odkazy čerpadel a čerpadla, která o nádrž přišla, odstraní |
+| `AddPlatform` / `RemovePlatform` | vytvoří plošinu z vybraných zdí (`pose_a = 0`, `pose_b` = posun druhé polohy), s prahem a vazbami na skříně a jednotky |
+| `AddPump` / `RemovePump` | propojí dvě nádrže, nastaví obousměrnost, skříně a případnou řídicí jednotku |
+
+Editor se na tvar nádrží ptá přes tentýž `WorldState`, jaký postaví runtime (`EditorSession.preview_world()`), takže autor levelu vidí hladinu přesně tam, kde ji uvidí hráč — hladina se nikde neukládá ([§9.2](#92-reprezentace-hladiny)). `EditorSession.cell_is_in_closed_cavity()` používá `WaterSystem.find_closed_cavities()`, aby editor odmítl založit nádrž v dutině, ze které by voda vytekla (V11).
 
 ---
 
@@ -1504,28 +1535,30 @@ Sloupec „stojí na" říká, které kapitoly stačí přečíst před začátk
 
 | # | Vzniká | Testy | Stojí na | Stav |
 |---|---|---|---|:--:|
-| M0 | `project.godot`, adresáře dle §3, `tests/run_all.gd`, minimální runner | prázdný běh runneru skončí úspěchem | [§3](#3-vrstvy-a-mapa-modulů) | ☐ |
-| M1 | `core/grid/grid_types.gd`, `level_data.gd`, `core/sim/world_state.gd`, `tests/level_builder.gd` | `LevelBuilder` postaví level, iterační pořadí a indexace buněk sedí | [§4](#4-souřadný-systém-a-konvence-mřížky), [§5](#5-datový-model) | ☐ |
+| M0 | `project.godot`, adresáře dle §3, `tests/run_all.gd`, minimální runner | prázdný běh runneru skončí úspěchem | [§3](#3-vrstvy-a-mapa-modulů) |☑ |
+| M1 | `core/grid/grid_types.gd`, `level_data.gd`, `core/sim/world_state.gd`, `tests/level_builder.gd` | `LevelBuilder` postaví level, iterační pořadí a indexace buněk sedí | [§4](#4-souřadný-systém-a-konvence-mřížky), [§5](#5-datový-model) |☑ |
 | M2 | `app/scenes/level_scene.tscn`, `app/view/world_view.gd` (MultiMesh po typech) | ručně: statický level je vidět | [§17.1](#171-scény) | ☐ |
 | M3 | `app/camera/` — orbit, kolize s mřížkou, first person | ručně: kamera neprojde kostkou | [§17.3](#173-kamera) | ☐ |
 | M4 | `core/sim/commands.gd`, `events.gd`, `simulation.gd`, `app/input/`, HUD s panelem robotů | otáčení, `SWITCH_ROBOT_NEXT`/`_TO`, `is_safe_to_leave` | [§6](#6-simulační-jádro-tah-příkazy-události), [§10](#10-specifikace-robotů) | ☐ |
-| M5 | `core/grid/grid_probe.gd`, `core/bt/bt_runtime.gd`, `bt_nodes.gd`, `trees/han.tres` | rovná chůze, obě šikminy, skluz po ledu, FAIL nad propastí na konci ledu | [§7.1](#71-dílčí-kroky)–[§7.6.0](#7600-sdílený-základ-chůze-han-set-il-dul-po-souši) | ☐ |
-| M6 | `core/sim/gravity.gd` | sloupec spadne v jednom průchodu; robot na vrcholu věže klesne bez zničení | [§8](#8-gravitace-a-usazování) | ☐ |
-| M7 | `core/sim/actions/han_dig.gd`, `han_dump.gd` | tři cíle nahrábnutí a jejich priorita, robot pod kostkou blokuje, hledání místa dopadu | [§7.6](#76-stromy-jednotlivých-robotů), [§11](#11-akce) | ☐ |
-| M8 | `core/sim/water.gd` — nádrže, `surface()`, `would_drown()` | aritmetika hladin, hranice **přesně** 1/2 kostky, `unlimited`, flood-fill nádrží | [§9](#9-vodní-systém) | ☐ |
-| M9 | `trees/dul.tres` + varianta pro plavání, `actions/dul_pump.gd`, `dul_release.gd` | čerpání mění hladinu o 2 jednotky, výběr stromu podle „je ve vodě", utonutí blokuje akci | [§7.6](#76-stromy-jednotlivých-robotů), [§9.4](#94-kontrola-utonutí) | ☐ |
-| M10 | Inventář a předměty v `world_state.gd` + `ahead_is_passable` | sbírání vstupem, plný inventář = překážka, kdo co smí sbírat, Da jen shora | [§12](#12-inventář-a-předměty) | ☐ |
-| M11 | `actions/set_burn.gd`, `yeo_freeze.gd`, `trees/set.tres`, `yeo.tres`, blok `WOOD` | priorita cílů dřeva, plovoucí kra (BFS), hladina se zmrazením/roztavením **nehne** | [§7.6](#76-stromy-jednotlivých-robotů), [§9.3](#93-změna-objemu) | ☐ |
-| M12 | `trees/net.tres`, `da.tres`, `STEP_UP`/`STEP_DOWN` mimo BT | limit ≤ 2 předměty nahoru, led ve zdi = FAIL, sešplhání proti sloupci za robotem, `is_safe_to_leave(Da)`, `cannot_land_cell` | [§7.6](#76-stromy-jednotlivých-robotů), [§7.7](#77-přímé-vertikální-kroky-mimo-behavior-tree-da-a-dul-ve-vodě) | ☐ |
-| M13 | Klíč, cíl a ukončení v `simulation.gd` | odemčení klíčem, odchod robota ze sekvence, `LevelCompleted` | [§14](#14-klíč-cíl-ukončení-levelu) | ☐ |
-| M14 | `core/sim/devices.gd` — skříně, jednotky, plošiny, čerpadla, akce Ila | Il ovládá plošinu, hmotnostní limit, přenos čerpadlem s kontrolou utonutí (celý, ne částečný) | [§13](#13-elektrická-zařízení-plošiny-čerpadla) | ☐ |
-| M15 | `core/io/level_reader.gd`, `level_writer.gd` | round-trip, přeskočení neznámého chunku, odmítnutí špatné CRC a vyšší verze, první golden test | [§15](#15-formát-uložení-levelu) | ☐ |
-| M16 | `editor/` — nástroje, výběr, undo, `LevelValidator` | V1–V14 headless; undo/redo vrátí přesně původní `LevelData` | [§16](#16-editor) | ☐ |
+| M5 | `core/grid/grid_probe.gd`, `core/bt/bt_runtime.gd`, `bt_nodes.gd`, `trees/han.tres` | rovná chůze, obě šikminy, skluz po ledu, FAIL nad propastí na konci ledu | [§7.1](#71-dílčí-kroky)–[§7.6.0](#7600-sdílený-základ-chůze-han-set-il-dul-po-souši) |☑ |
+| M6 | `core/sim/gravity.gd` | sloupec spadne v jednom průchodu; robot na vrcholu věže klesne bez zničení | [§8](#8-gravitace-a-usazování) |☑ |
+| M7 | `core/sim/actions/han_dig.gd`, `han_dump.gd` | tři cíle nahrábnutí a jejich priorita, robot pod kostkou blokuje, hledání místa dopadu | [§7.6](#76-stromy-jednotlivých-robotů), [§11](#11-akce) |☑ |
+| M8 | `core/sim/water.gd` — nádrže, `surface()`, `would_drown()` | aritmetika hladin, hranice **přesně** 1/2 kostky, `unlimited`, flood-fill nádrží | [§9](#9-vodní-systém) |☑ |
+| M9 | `trees/dul.tres` + varianta pro plavání, `actions/dul_pump.gd`, `dul_release.gd` | čerpání mění hladinu o 2 jednotky, výběr stromu podle „je ve vodě", utonutí blokuje akci | [§7.6](#76-stromy-jednotlivých-robotů), [§9.4](#94-kontrola-utonutí) |☑ |
+| M10 | Inventář a předměty v `world_state.gd` + `ahead_is_passable` | sbírání vstupem, plný inventář = překážka, kdo co smí sbírat, Da jen shora | [§12](#12-inventář-a-předměty) |☑ |
+| M11 | `actions/set_burn.gd`, `yeo_freeze.gd`, `trees/set.tres`, `yeo.tres`, blok `WOOD` | priorita cílů dřeva, plovoucí kra (BFS), hladina se zmrazením/roztavením **nehne** | [§7.6](#76-stromy-jednotlivých-robotů), [§9.3](#93-změna-objemu) |☑ |
+| M12 | `trees/net.tres`, `da.tres`, `STEP_UP`/`STEP_DOWN` mimo BT | limit ≤ 2 předměty nahoru, led ve zdi = FAIL, sešplhání proti sloupci za robotem, `is_safe_to_leave(Da)`, `cannot_land_cell` | [§7.6](#76-stromy-jednotlivých-robotů), [§7.7](#77-přímé-vertikální-kroky-mimo-behavior-tree-da-a-dul-ve-vodě) |☑ |
+| M13 | Klíč, cíl a ukončení v `simulation.gd` | odemčení klíčem, odchod robota ze sekvence, `LevelCompleted` | [§14](#14-klíč-cíl-ukončení-levelu) |☑ |
+| M14 | `core/sim/devices.gd` — skříně, jednotky, plošiny, čerpadla, akce Ila | Il ovládá plošinu, hmotnostní limit, přenos čerpadlem s kontrolou utonutí (celý, ne částečný) | [§13](#13-elektrická-zařízení-plošiny-čerpadla) |☑ |
+| M15 | `core/io/level_reader.gd`, `level_writer.gd` | round-trip, přeskočení neznámého chunku, odmítnutí špatné CRC a vyšší verze, první golden test | [§15](#15-formát-uložení-levelu) |☑ |
+| M16 | `editor/` — nástroje, výběr, undo, `LevelValidator` | V1–V14 headless; undo/redo vrátí přesně původní `LevelData` | [§16](#16-editor) |☑ |
 | M17 | Náhled z editoru, hlavní menu, restart | ručně: vytvoř → hraj → restartuj → vrať se do editoru bez ztráty dat | [§16.1](#161-architektura), [§14](#14-klíč-cíl-ukončení-levelu) | ☐ |
 
-Stavový sloupec se udržuje v tomto dokumentu (`☐` → `☑`), aby bylo z jediného místa vidět, co je další užitečný krok.
+Stavový sloupec se udržuje v tomto dokumentu (`☐` → `☑`), aby bylo z jediného místa vidět, co je další užitečný krok. `☑` mají milníky, jejichž kritérium ověřuje procházející headless test; M2, M3, M4 a M17 stojí na ručním spuštění hry, takže zůstávají `☐`, dokud je autor neprojde v editoru a ve hře.
 
-**Aktuální stav (první implementační dávka).** Kód všech milníků M0–M15 v `core/` existuje včetně headless testů, testy ale zatím **nebyly spuštěné** (na vývojovém stroji není nainstalovaný Godot) — dokud runner neproběhne, žádný milník není podle [§20.2](#202-definice-hotového-milníku) hotový. M16 je hotový v části „čistá logika" (`LevelValidator`, `EditorSession`, undo/redo, náhled), chybí editorové UI. M17 má hotový restart, chybí menu a náhled z editoru.
+**Aktuální stav.** Headless runner **běží** (`godot --headless --path game --script tests/run_all.gd`): 15 sad, 145 testů, vše prochází. Kód všech milníků M0–M16 existuje včetně testů; M16 má hotový i editorové UI včetně nástrojů na mechanismy ([§16.3](#163-nástroje-pro-mechanismy)). M17 má hotový restart i náhled z editoru, chybí plnohodnotné menu a výběr levelů.
+
+> **Poznámka k prvnímu spuštění testů.** Runner do té doby vůbec nešel spustit — `tests/test_architecture.gd` obsahoval `sim is Node`, což GDScript odmítne už při překladu (statická analýza ví, že `Simulation` `Node` být nemůže), a padal celý soubor `run_all.gd`. Kontrola se přepsala na `is_instance_of(sim, Node)`. Poučení pro postup ([§20.6](#206-pracovní-postup)): „napsané testy" a „procházející testy" jsou dva různé stavy a milník je hotový až v tom druhém.
 
 ### 20.7 Otevřené otázky z implementace
 
@@ -1539,8 +1572,9 @@ Díry, které vyplavaly až při přepisu pravidel do kódu ([§21](#21-jak-je-t
 | O4 | **Dulův vstup do vody a výlez z ní.** Design dokument §1.1.2 to podmiňuje tím, že hladina je ve výšce podkladu, na kterém Dul stojí. Pravidlo není nikde přepsané do podmínek stromu. | Neimplementováno (raději díra než domyšlené pravidlo). Strom plavání má navíc větev „vylezení na břeh" s podmínkou pevného podkladu, jinak by Dul vyplaval do vzduchu a porušil I5. |
 | O5 | **Konec skluzu o překážku.** Design dokument §2.1.4 říká, že robot klouže „než narazí na překážku"; §7.3 popisuje jen konec na jiném povrchu a `FAIL` nad propastí. | Přidána větev „konec skluzu o překážku": je-li vpředu neprůchodná buňka, nashromážděná fronta se provede a robot zastaví na ledu. |
 | O6 | **Splynutí nádrží za běhu.** Han může vykopat příčku mezi dvěma nádržemi. Formát i čerpadla odkazují na nádrž indexem. | Voda se slije do nádrže s nižším indexem, druhá zůstane prázdná. Chování není v žádném dokumentu. |
-| O7 | **Spouštění automatiky.** „Jakmile je limit splněn" nedefinuje, jestli se plošina hýbe opakovaně každý tah. | Náběžná hrana (`trigger_latched`) u plošin i čerpadel, jinak by kmitaly každý příkaz. |
+| O7 | ~~**Spouštění automatiky.** „Jakmile je limit splněn" nedefinuje, jestli se plošina hýbe opakovaně každý tah.~~ **Vyřešeno** — design dokument §2.2.1: náběžná hrana u plošiny i čerpadla; u čerpadla je podmínkou celý přenos (napájení, voda ve zdroji, místo v cíli, bezpečná hladina). | Náběžná hrana (`trigger_latched`) u plošin i čerpadel. |
 | O8 | **Napájení elektrické skříně.** `is_on` má stav, ale žádné pravidlo neříká, co ho mění. | Skříň bez poruchy startuje zapnutá; `DEVICE_INPUT` na přímo ovládanou skříň napájení přepíná. |
+| O11 | ~~**Zařízení na plošině.** Zařízení je zeď plus odkaz souřadnicí ([§13.1](#131-zařízení)); `move_platform` posouvá jen blok, takže by se zařízení „odtrhlo" od své zdi.~~ **Vyřešeno** — design dokument §2.2.1: zařízení v kostce plošiny je její pevnou součástí a jede s ní. | `move_platform` posouvá i `DeviceState.cell` ([§13.2](#132-transportní-plošiny)). |
 | O9 | **Okraj levelu vůči vodě.** [§4](#4-souřadný-systém-a-konvence-mřížky) říká, že okraj se chová jako plná zeď; [§9.1](#91-identifikace-nádrží) říká, že dutina dotýkající se okraje není nádrž. | Pro pohyb je okraj zeď, pro vodu díra — nádrž musí mít vlastní dno i stěny. |
 | O10 | **`LevelValidator` v `core/`, ne v `editor/`.** Pravidla V1–V14 potřebuje i čtečka levelu ([§15](#15-formát-uložení-levelu)), a `core/` nesmí záviset na `editor/` ([§3](#3-vrstvy-a-mapa-modulů)). | Validátor leží v `core/grid/level_validator.gd`, editor ho jen volá. |
 

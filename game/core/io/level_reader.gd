@@ -172,7 +172,9 @@ static func _read_chunk(level: LevelData, chunk_id: String, payload: PackedByteA
 				pump.reservoir_b = stream.get_u16()
 				pump.bidirectional = stream.get_u8() != 0
 				pump.default_direction = stream.get_u8()
-				pump.linked_cabinet = stream.get_16()
+				var pump_cabinets := stream.get_u16()
+				for _c in pump_cabinets:
+					pump.linked_cabinets.append(stream.get_u16())
 				pump.linked_control_unit = stream.get_16()
 				level.pumps.append(pump)
 		"META":

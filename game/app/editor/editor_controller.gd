@@ -10,7 +10,7 @@ extends Node3D
 signal play_requested(simulation: Simulation)
 signal menu_requested
 
-enum Tool { BLOCK, ROBOT, ITEM, KEY, ERASE }
+enum Tool { BLOCK, ROBOT, ITEM, KEY, ERASE, DEVICE, RESERVOIR, PLATFORM }
 
 const PICK_STEP := 0.04
 const PICK_MARGIN := 1
@@ -25,6 +25,18 @@ var _block_type: int = GridTypes.BlockType.WALL
 var _robot_kind: int = GridTypes.RobotKind.HAN
 var _item_type: int = GridTypes.ItemType.FUEL
 var _orientation: int = GridTypes.Direction.NORTH
+
+# Mechanismy (§13): zařízení se kladou po jedné buňce, nádrž se zakládá
+# kliknutím do uzavřené dutiny, plošina se skládá z vybraných zdí.
+var _device_kind: int = GridTypes.DeviceKind.POWER_CABINET
+var _device_control_mode: int = GridTypes.ControlMode.BUTTON
+var _device_broken: bool = false
+var _reservoir_volume: int = 0
+var _reservoir_unlimited: bool = false
+var _platform_selection: Array = []   # Vector3i, buňky zdí v poloze A
+## Jednorázová hláška k poslednímu úkonu; _refresh_status ji vypíše nad
+## seznam problémů levelu a zase zahodí.
+var _hint: String = ""
 
 var _active: bool = true
 
@@ -74,6 +86,28 @@ func _connect_ui() -> void:
 	ui.erase_tool_selected.connect(func():
 		_tool = Tool.ERASE
 		ui.set_tool_label("Nástroj: guma"))
+	ui.device_tool_selected.connect(func(kind):
+		_tool = Tool.DEVICE
+		_device_kind = kind
+		ui.set_tool_label("Nástroj: %s" % EditorUi.DEVICE_LABELS.get(kind, "?")))
+	ui.device_settings_changed.connect(func(control_mode, is_broken):
+		_device_control_mode = control_mode
+		_device_broken = is_broken)
+	ui.reservoir_tool_selected.connect(func():
+		_tool = Tool.RESERVOIR
+		ui.set_tool_label("Nástroj: nádrž"))
+	ui.reservoir_settings_changed.connect(func(volume_units, unlimited):
+		_reservoir_volume = volume_units
+		_reservoir_unlimited = unlimited)
+	ui.platform_tool_selected.connect(func():
+		_tool = Tool.PLATFORM
+		ui.set_tool_label("Nástroj: výběr buněk plošiny"))
+	ui.platform_selection_cleared.connect(func():
+		_clear_platform_selection()
+		_refresh_status())
+	ui.platform_create_requested.connect(_on_create_platform)
+	ui.pump_create_requested.connect(_on_create_pump)
+	ui.mechanism_remove_requested.connect(_on_remove_mechanism)
 	ui.rotate_pressed.connect(_on_rotate)
 	ui.undo_pressed.connect(_on_undo)
 	ui.redo_pressed.connect(_on_redo)
@@ -90,7 +124,10 @@ func _process(_delta: float) -> void:
 	if not pick.hit:
 		view.set_cursor(null, false)
 		return
-	var target_cell: Vector3i = pick.solid_cell if _tool == Tool.ERASE else pick.place_cell
+	# Guma a výběr buněk plošiny míří na kostku samotnou, ostatní nástroje
+	# na prázdnou buňku před ní.
+	var target_cell: Vector3i = pick.solid_cell \
+			if _tool == Tool.ERASE or _tool == Tool.PLATFORM else pick.place_cell
 	view.set_cursor(target_cell, session.level.is_inside(target_cell))
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -131,6 +168,102 @@ func _on_click() -> void:
 		Tool.KEY:
 			if session.level.is_inside(pick.place_cell):
 				session.run(EditorOperation.MoveKey.new(pick.place_cell))
+		Tool.DEVICE:
+			_place_device(pick.place_cell)
+		Tool.RESERVOIR:
+			_set_reservoir(pick.place_cell)
+		Tool.PLATFORM:
+			_toggle_platform_cell(pick.solid_cell)
+	view.rebuild()
+	_refresh_status()
+
+# ── Mechanismy (§13) ─────────────────────────────────────────────────────
+
+## Zařízení zabírá vlastní kostku, která se chová jako zeď (design dok.
+## §2.2.1) — operace ji rovnou položí. Přístupový směr je aktuální orientace
+## nástroje (klávesa R), takže musí být vodorovný.
+func _place_device(cell: Vector3i) -> void:
+	if not session.level.is_inside(cell):
+		return
+	if not GridTypes.is_horizontal(_orientation):
+		_hint = "Zařízení se ovládá jen z vodorovného směru — otoč nástroj (R)."
+		return
+	session.run(EditorOperation.PlaceDevice.new(cell, _device_kind, _orientation,
+			_device_control_mode, _device_broken))
+
+## Nádrž nelze umístit volně — zakládá se v uzavřené dutině, jejíž tvar
+## a kapacita vyplynou z okolních zdí (design dok. §2.2.1, §9.1). Klik do
+## buňky, která už do nějaké nádrže patří, jen upraví její nastavení.
+func _set_reservoir(cell: Vector3i) -> void:
+	if not session.level.is_inside(cell):
+		return
+	var existing := session.reservoir_index_at(cell)
+	if existing != -1:
+		var anchor: Vector3i = session.level.reservoirs[existing].anchor
+		session.run(EditorOperation.SetReservoir.new(anchor, _reservoir_volume,
+				_reservoir_unlimited))
+		return
+	if not session.cell_is_in_closed_cavity(cell):
+		_hint = "Nádrž musí být uzavřená dutina — %s je otevřená, voda by vytekla." % cell
+		return
+	session.run(EditorOperation.SetReservoir.new(cell, _reservoir_volume,
+			_reservoir_unlimited))
+
+## Plošina se skládá ze série zdí (design dok. §2.2.1); klik zeď do výběru
+## přidá, další klik ji zase odebere.
+func _toggle_platform_cell(cell: Vector3i) -> void:
+	if not session.level.is_inside(cell):
+		return
+	if session.level.block_at(cell) != GridTypes.BlockType.WALL:
+		_hint = "Plošinu tvoří jen zdi — na %s zeď není." % cell
+		return
+	if _platform_selection.has(cell):
+		_platform_selection.erase(cell)
+	else:
+		_platform_selection.append(cell)
+	view.set_platform_selection(_platform_selection)
+
+func _on_create_platform(pose_b: Vector3i, weight_limit: int, cabinets: Array,
+		control_units: Array) -> void:
+	if _platform_selection.is_empty():
+		_hint = "Nejdřív vyber buňky plošiny (nástroj „Výběr buněk plošiny\")."
+		return
+	session.run(EditorOperation.AddPlatform.new(_platform_selection, pose_b,
+			weight_limit, cabinets, control_units))
+	_clear_platform_selection()
+	view.rebuild()
+	_refresh_status()
+
+func _clear_platform_selection() -> void:
+	_platform_selection.clear()
+	view.set_platform_selection(_platform_selection)
+
+func _on_create_pump(reservoir_a: int, reservoir_b: int, cabinets: Array,
+		control_unit: int, bidirectional: bool, default_direction: int) -> void:
+	if reservoir_a < 0 or reservoir_b < 0:
+		_hint = "Čerpadlo potřebuje dvě nádrže — nejdřív je v levelu vytvoř."
+		return
+	if reservoir_a == reservoir_b:
+		_hint = "Čerpadlo musí spojovat dvě různé nádrže."
+		return
+	session.run(EditorOperation.AddPump.new(reservoir_a, reservoir_b, cabinets,
+			control_unit, bidirectional, default_direction))
+	view.rebuild()
+	_refresh_status()
+
+func _on_remove_mechanism(kind: String, index: int) -> void:
+	match kind:
+		"device":
+			if index >= 0 and index < session.level.devices.size():
+				session.run(EditorOperation.RemoveDevice.new(session.level.devices[index].cell))
+		"reservoir":
+			if index >= 0 and index < session.level.reservoirs.size():
+				session.run(EditorOperation.RemoveReservoir.new(
+						session.level.reservoirs[index].anchor))
+		"platform":
+			session.run(EditorOperation.RemovePlatform.new(index))
+		"pump":
+			session.run(EditorOperation.RemovePump.new(index))
 	view.rebuild()
 	_refresh_status()
 
@@ -143,6 +276,20 @@ func _erase_at(cell: Vector3i) -> void:
 		return
 	if session.level.item_at(cell) != GridTypes.NO_ITEM:
 		session.run(EditorOperation.RemoveItem.new(cell))
+		return
+	# Zařízení mizí i s kostkou zdi, ve které sedí; nádrž se maže kliknutím
+	# na kteroukoli buňku své dutiny.
+	if session.device_index_at(cell) != -1:
+		session.run(EditorOperation.RemoveDevice.new(cell))
+		return
+	var platform_index := session.platform_index_at(cell)
+	if platform_index != -1:
+		session.run(EditorOperation.RemovePlatform.new(platform_index))
+		return
+	var reservoir_index := session.reservoir_index_at(cell)
+	if reservoir_index != -1:
+		session.run(EditorOperation.RemoveReservoir.new(
+				session.level.reservoirs[reservoir_index].anchor))
 		return
 	if session.level.block_at(cell) != GridTypes.BlockType.EMPTY:
 		session.run(EditorOperation.SetCell.new(cell, GridTypes.BlockType.EMPTY))
@@ -173,6 +320,7 @@ func _on_save(path: String) -> void:
 func _on_load(path: String) -> void:
 	var error := session.load_from_file(path)
 	if error == "":
+		_clear_platform_selection()
 		view.show_level(session.level)
 		camera.center_on(session.level)
 		ui.set_status("Načteno: %s" % path.get_file())
@@ -182,6 +330,7 @@ func _on_load(path: String) -> void:
 
 func _on_new_level(size: Vector3i) -> void:
 	session = EditorSession.new(LevelData.create_empty(size))
+	_clear_platform_selection()
 	view.show_level(session.level)
 	camera.center_on(session.level)
 	_refresh_status()
@@ -194,11 +343,72 @@ func _on_play() -> void:
 	play_requested.emit(session.start_playtest())
 
 func _refresh_status() -> void:
+	ui.set_mechanism_data(_mechanism_data())
 	var problems := session.validate()
-	if problems.is_empty():
-		ui.set_status("Level je platný.")
-	else:
-		ui.set_status("Problémy:\n" + "\n".join(problems))
+	var text := "Level je platný." if problems.is_empty() \
+			else "Problémy:\n" + "\n".join(problems)
+	if _hint != "":
+		text = _hint + "\n" + text
+		_hint = ""
+	ui.set_status(text)
+
+## Popisy mechanismů pro nabídky a seznam v UI. UI nezná pravidla ani
+## datový model — dostane hotové dvojice [index, popis].
+func _mechanism_data() -> Dictionary:
+	var level := session.level
+	var cabinets: Array = []
+	var control_units: Array = []
+	var devices: Array = []
+	for i in level.devices.size():
+		var device = level.devices[i]
+		var detail := "%d — %s %s, přístup %s" % [i,
+				String(EditorUi.DEVICE_LABELS.get(device.kind, "?")), device.cell,
+				String(EditorUi.DIRECTION_LABELS.get(device.access_direction, "?"))]
+		if device.kind == GridTypes.DeviceKind.CONTROL_UNIT:
+			detail += ", %s" % String(EditorUi.CONTROL_MODE_LABELS.get(device.control_mode, "?"))
+		if device.is_broken:
+			detail += " (rozbité)"
+		if device.kind == GridTypes.DeviceKind.CONTROL_UNIT:
+			control_units.append([i, detail])
+		else:
+			cabinets.append([i, detail])
+		devices.append([i, detail])
+
+	var reservoirs: Array = []
+	for i in level.reservoirs.size():
+		var res = level.reservoirs[i]
+		var capacity := session.reservoir_capacity(i)
+		var fill := "neomezená" if res.unlimited \
+				else ("%d/%d jednotek" % [res.volume_units, capacity] if capacity >= 0
+						else "bez dutiny!")
+		reservoirs.append([i, "%d — kotva %s, %s" % [i, res.anchor, fill]])
+
+	var platforms: Array = []
+	for i in level.platforms.size():
+		var platform = level.platforms[i]
+		var mode := "automatická" if platform.linked_control_units.is_empty() else "manuální"
+		platforms.append([i, "%d — %d buněk, posun %s, práh %d, %s"
+				% [i, platform.cells.size(), platform.pose_b, platform.weight_limit, mode]])
+
+	var pumps: Array = []
+	for i in level.pumps.size():
+		var pump = level.pumps[i]
+		var arrow := "%d → %d" % [pump.reservoir_a, pump.reservoir_b] \
+				if pump.default_direction == 0 else "%d → %d" % [pump.reservoir_b, pump.reservoir_a]
+		if pump.bidirectional:
+			arrow += " (obousměrné)"
+		var mode := "automatické" if pump.linked_control_unit == -1 else "manuální"
+		pumps.append([i, "%d — nádrže %s, %s" % [i, arrow, mode]])
+
+	return {
+		"devices": devices,
+		"cabinets": cabinets,
+		"control_units": control_units,
+		"reservoirs": reservoirs,
+		"platforms": platforms,
+		"pumps": pumps,
+		"platform_selection": _platform_selection.size(),
+	}
 
 ## Krokuje paprsek od kamery skrz mřížku a najde první pevnou buňku.
 ## `place_cell` je poslední prázdná buňka před ní (kam se dá něco položit),

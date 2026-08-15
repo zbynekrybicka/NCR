@@ -108,25 +108,28 @@ class PlatformDef extends RefCounted:
 
 
 class PumpDef extends RefCounted:
+	## Čerpadlo se napojuje na jednu i víc elektrických skříní (stejně jako
+	## plošina) a případně na jednu řídicí jednotku (design dok. §2.2.1).
 	var reservoir_a: int = 0
 	var reservoir_b: int = 0
 	var bidirectional: bool = false
-	var default_direction: int = 0   # 0 = A→B, 1 = B→A
-	var linked_cabinet: int = -1
+	var default_direction: int = 0    # 0 = A→B, 1 = B→A
+	var linked_cabinets: Array = []   # indexy do devices
 	var linked_control_unit: int = -1 # -1 → automatické
 
 	func _init(p_a: int = 0, p_b: int = 0, p_bidirectional: bool = false,
-			p_default_direction: int = 0, p_cabinet: int = -1, p_control_unit: int = -1) -> void:
+			p_default_direction: int = 0, p_cabinets: Array = [],
+			p_control_unit: int = -1) -> void:
 		reservoir_a = p_a
 		reservoir_b = p_b
 		bidirectional = p_bidirectional
 		default_direction = p_default_direction
-		linked_cabinet = p_cabinet
+		linked_cabinets = p_cabinets.duplicate()
 		linked_control_unit = p_control_unit
 
 	func duplicate_def() -> PumpDef:
 		return PumpDef.new(reservoir_a, reservoir_b, bidirectional, default_direction,
-				linked_cabinet, linked_control_unit)
+				linked_cabinets, linked_control_unit)
 
 
 # ── Indexace buněk (§4) ────────────────────────────────────────────────────

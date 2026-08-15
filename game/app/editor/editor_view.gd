@@ -13,6 +13,7 @@ var level: LevelData
 var _content: Node3D
 var _cursor: MeshInstance3D
 var _mesh_cache: Dictionary = {} # block_type -> Mesh
+var _platform_selection: Array = [] # Vector3i, rozestavěná plošina
 
 func _ready() -> void:
 	_content = Node3D.new()
@@ -34,6 +35,16 @@ func rebuild() -> void:
 	_build_robots()
 	_build_items()
 	_build_key()
+	_build_water()
+	_build_devices()
+	_build_platforms()
+	_build_pumps()
+	_build_platform_selection()
+
+## Rozestavěná plošina (buňky vybrané nástrojem, ještě nepotvrzené).
+func set_platform_selection(cells: Array) -> void:
+	_platform_selection = cells.duplicate()
+	rebuild()
 
 ## Zvýrazní buňku pod kurzorem (zeleně = platné umístění, červeně = mimo
 ## level). cell == null skryje kurzor.
@@ -154,6 +165,112 @@ func _build_items() -> void:
 		node.mesh = mesh
 		node.position = WorldView.cell_to_position(item.cell)
 		_content.add_child(node)
+
+# ── Mechanismy (§13) ───────────────────────────────────────────────────────
+
+## Voda v nádržích. Hladina je odvozená veličina (§9.2) — editor ji počítá
+## přes tentýž WorldState, jaký postaví runtime, takže autor levelu vidí
+## přesně to, co uvidí hráč.
+func _build_water() -> void:
+	if level.reservoirs.is_empty():
+		return
+	var world := WorldState.from_level(level)
+	for i in world.reservoirs.size():
+		var res: ReservoirState = world.reservoirs[i]
+		for cell in res.cells:
+			var depth := world.water_depth_at(cell)
+			if depth == GridTypes.WaterDepth.DRY and not res.unlimited:
+				continue
+			var color := Color(0.2, 0.45, 0.95, 0.35) if depth == GridTypes.WaterDepth.DEEP \
+					else Color(0.35, 0.7, 1.0, 0.25)
+			_add_translucent_box(cell, color, 0.98)
+		_add_marker(res.anchor, Color(0.2, 0.5, 1.0), "Nádrž %d" % i)
+
+func _build_devices() -> void:
+	for i in level.devices.size():
+		var device = level.devices[i]
+		if not level.is_inside(device.cell):
+			continue
+		var is_cabinet: bool = device.kind == GridTypes.DeviceKind.POWER_CABINET
+		var color := Color(1.0, 0.75, 0.15) if is_cabinet else Color(0.6, 0.9, 0.4)
+		if device.is_broken:
+			color = Color(0.8, 0.25, 0.25)
+		_add_translucent_box(device.cell, color, 1.04)
+		var name := "Skříň %d" if is_cabinet else "Jednotka %d"
+		_add_marker(device.cell, color, name % i)
+		# Šipka ukazuje, ze které buňky se dá zařízení ovládat (§13.1).
+		_add_line(WorldView.cell_to_position(device.cell),
+				WorldView.cell_to_position(device.cell + GridTypes.dir_vector(
+						device.access_direction)), color)
+
+func _build_platforms() -> void:
+	for i in level.platforms.size():
+		var platform = level.platforms[i]
+		for cell in platform.cells:
+			var at_a: Vector3i = cell + platform.pose_a
+			var at_b: Vector3i = cell + platform.pose_b
+			_add_translucent_box(at_a, Color(0.9, 0.4, 0.9, 0.3), 1.05)
+			# Druhá poloha jako duch — dráha mezi polohami musí zůstat volná (V8).
+			_add_translucent_box(at_b, Color(0.9, 0.4, 0.9, 0.15), 0.9)
+			_add_line(WorldView.cell_to_position(at_a), WorldView.cell_to_position(at_b),
+					Color(0.9, 0.4, 0.9))
+		if not platform.cells.is_empty():
+			_add_marker(platform.cells[0] + platform.pose_a, Color(0.9, 0.4, 0.9),
+					"Plošina %d" % i)
+
+## Čerpadlo je abstraktní vazba mezi dvěma nádržemi (vzdálenost neomezená,
+## model nepovinný — design dok. §2.2.1); v editoru se kreslí jako spojnice
+## kotevních buněk.
+func _build_pumps() -> void:
+	for i in level.pumps.size():
+		var pump = level.pumps[i]
+		if pump.reservoir_a >= level.reservoirs.size() or pump.reservoir_b >= level.reservoirs.size():
+			continue
+		if pump.reservoir_a < 0 or pump.reservoir_b < 0:
+			continue
+		var from: Vector3i = level.reservoirs[pump.reservoir_a].anchor
+		var to: Vector3i = level.reservoirs[pump.reservoir_b].anchor
+		_add_line(WorldView.cell_to_position(from), WorldView.cell_to_position(to),
+				Color(0.2, 0.9, 0.9))
+		_add_marker(from, Color(0.2, 0.9, 0.9), "Čerpadlo %d →" % i)
+
+func _build_platform_selection() -> void:
+	for cell in _platform_selection:
+		_add_translucent_box(cell, Color(1.0, 1.0, 0.3, 0.35), 1.08)
+
+func _add_translucent_box(cell: Vector3i, color: Color, scale: float) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3.ONE * (CELL_SIZE * scale)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.surface_set_material(0, material)
+	var node := MeshInstance3D.new()
+	node.mesh = mesh
+	node.position = WorldView.cell_to_position(cell)
+	_content.add_child(node)
+
+func _add_marker(cell: Vector3i, color: Color, text: String) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.modulate = color
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.position = WorldView.cell_to_position(cell) + Vector3(0, 0.6, 0)
+	_content.add_child(label)
+
+func _add_line(from: Vector3, to: Vector3, color: Color) -> void:
+	var immediate := ImmediateMesh.new()
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	immediate.surface_begin(Mesh.PRIMITIVE_LINES, material)
+	immediate.surface_add_vertex(from)
+	immediate.surface_add_vertex(to)
+	immediate.surface_end()
+	var node := MeshInstance3D.new()
+	node.mesh = immediate
+	_content.add_child(node)
 
 func _build_key() -> void:
 	if not level.is_inside(level.key_position):

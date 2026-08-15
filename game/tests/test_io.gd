@@ -15,7 +15,7 @@ func _sample_level() -> LevelData:
 				GridTypes.Direction.EAST, GridTypes.ControlMode.SWITCH, true) \
 		.platform([Vector3i(1, 0, 1), Vector3i(2, 0, 1)], Vector3i.ZERO,
 				Vector3i(0, 2, -1), 4, [0], [0]) \
-		.pump(0, 0, 0, 1, true, 1) \
+		.pump(0, 0, [0, 2], 1, true, 1) \
 		.build()
 	level.level_name = "Zkušební level"
 	level.author = "Zbyněk"
@@ -47,7 +47,8 @@ func test_round_trip() -> void:
 	t.is_true(back.devices[0].is_broken, "porucha zařízení")
 	t.equal(back.platforms[0].cells.size(), 2, "buňky plošiny")
 	t.equal(back.platforms[0].pose_b, Vector3i(0, 2, -1), "záporný offset polohy")
-	t.equal(back.pumps[0].linked_control_unit, 1, "vazba čerpadla")
+	t.equal(back.pumps[0].linked_control_unit, 1, "vazba čerpadla na řídicí jednotku")
+	t.equal(back.pumps[0].linked_cabinets, [0, 2], "seznam skříní čerpadla")
 	t.is_true(back.pumps[0].bidirectional, "obousměrnost čerpadla")
 	t.equal(back.level_name, "Zkušební level", "název levelu (UTF-8)")
 	t.equal(back.author, "Zbyněk", "autor (UTF-8)")

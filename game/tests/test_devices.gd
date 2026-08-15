@@ -6,7 +6,8 @@ extends TestSuite
 
 ## Il stojí u řídicí jednotky ve zdi; vedle je plošina a napájecí skříň.
 ## Zařízení: 0 = napájecí skříň, 1 = řídicí jednotka.
-func _platform_level(weight_limit: int = 2, rider: bool = false) -> Simulation:
+## `weight_limit` je spouštěcí práh, ne nosnost (design dok. §2.2.1).
+func _platform_level(weight_limit: int = 0, rider: bool = false) -> Simulation:
 	var builder := LevelBuilder.new() \
 		.layer(0, "#####") \
 		.layer(1, ".L###") \
@@ -36,7 +37,7 @@ func test_il_takes_control_and_moves_the_platform() -> void:
 	t.is_true(input.has_event(Event.EventType.PLATFORM_MOVED), "událost přejezdu")
 
 func test_control_survives_robot_switch() -> void:
-	var sim := _platform_level(2, true)
+	var sim := _platform_level(0, true)
 	action_1(sim)
 	t.equal(sim.world.robots[0].controlling_device, 1, "Il ovládá jednotku")
 	submit(sim, Command.CommandType.SWITCH_ROBOT_TO, 1)
@@ -54,13 +55,52 @@ func test_platform_carries_the_robot_standing_on_it() -> void:
 	submit(sim, Command.CommandType.DEVICE_INPUT)
 	t.equal(sim.world.robots[1].cell, Vector3i(3, 3, 0), "vyjel s plošinou nahoru")
 
-func test_platform_respects_the_weight_limit() -> void:
-	var sim := _platform_level(1, true)
+## Hmotnostní limit je spouštěcí práh: pod ním se plošina nehne, na něm
+## a nad ním ano (design dok. §2.2.1).
+func test_platform_needs_the_trigger_weight() -> void:
+	var sim := _platform_level(3, true)
 	action_1(sim)
 	var input := submit(sim, Command.CommandType.DEVICE_INPUT)
-	t.is_false(input.accepted, "přetížená plošina se nehne")
+	t.is_false(input.accepted, "pod prahem se plošina nehne")
 	t.equal(sim.world.block_at(Vector3i(3, 1, 0)), GridTypes.BlockType.WALL,
 			"plošina zůstala dole")
+
+	var loaded := _platform_level(2, true)
+	action_1(loaded)
+	t.is_true(submit(loaded, Command.CommandType.DEVICE_INPUT).accepted,
+			"s dost těžkým nákladem se rozjede")
+
+## Zařízení v kostce plošiny je její pevnou součástí a přesune se s ní
+## (design dok. §2.2.1) — jinak by zůstalo viset na staré souřadnici.
+func test_platform_carries_its_own_device() -> void:
+	var sim := LevelBuilder.new() \
+		.layer(0, "#####") \
+		.layer(1, ".L###") \
+		.layer(2, ".....") \
+		.layer(3, ".....") \
+		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(4, 1, 0),
+				GridTypes.Direction.WEST) \
+		.device(GridTypes.DeviceKind.CONTROL_UNIT, Vector3i(2, 1, 0),
+				GridTypes.Direction.WEST, GridTypes.ControlMode.BUTTON) \
+		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(3, 1, 0),
+				GridTypes.Direction.NORTH) \
+		.platform([Vector3i(3, 1, 0)], Vector3i.ZERO, Vector3i(0, 1, 0), 0, [0], [1]) \
+		.simulate()
+
+	action_1(sim)
+	t.is_true(submit(sim, Command.CommandType.DEVICE_INPUT).accepted, "plošina přejela")
+	t.equal(sim.world.devices[2].cell, Vector3i(3, 2, 0),
+			"skříň na plošině jela s ní")
+	t.equal(sim.world.device_at(Vector3i(3, 2, 0)), 2,
+			"a v nové poloze se dá najít")
+	t.equal(sim.world.devices[0].cell, Vector3i(4, 1, 0),
+			"skříň mimo plošinu zůstala na místě")
+
+func test_empty_platform_with_a_threshold_stays_put() -> void:
+	var sim := _platform_level(2, false)
+	action_1(sim)
+	t.is_false(submit(sim, Command.CommandType.DEVICE_INPUT).accepted,
+			"prázdná plošina práh nesplní")
 
 func test_broken_device_needs_a_service_kit() -> void:
 	var sim := LevelBuilder.new() \
@@ -99,7 +139,7 @@ func _pump_world(volume_a: int, volume_b: int, robot_in_b: bool = false) -> Worl
 		.reservoir(Vector3i(6, 1, 1), volume_b) \
 		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(4, 1, 1),
 				GridTypes.Direction.WEST) \
-		.pump(0, 1, 0) \
+		.pump(0, 1, [0]) \
 		.build()
 	var world := WorldState.from_level(level)
 	DeviceSystem.initialize(world)
@@ -134,3 +174,50 @@ func test_pump_must_not_drain_an_unlimited_reservoir() -> void:
 	world.reservoirs[0].unlimited = true
 	t.is_false(DeviceSystem.pump_can_transfer(world, 0, 0).ok,
 			"z neomezené nádrže čerpadlo čerpat nesmí (§13.3)")
+
+## Čerpadlo je pod napětím, jen když jsou VŠECHNY napojené skříně opravené
+## a zapnuté (design dok. §2.2.1).
+func test_pump_needs_all_of_its_cabinets() -> void:
+	var world := _pump_world(4, 0)
+	var second := DeviceState.new()
+	second.kind = GridTypes.DeviceKind.POWER_CABINET
+	second.cell = Vector3i(4, 2, 1)
+	second.is_broken = true
+	world.devices.append(second)
+	world.pumps[0].linked_cabinets = [0, 1]
+	t.is_false(DeviceSystem.pump_can_transfer(world, 0, 0).ok,
+			"rozbitá druhá skříň čerpadlo zastaví")
+	second.is_broken = false
+	second.is_on = true
+	t.is_true(DeviceSystem.pump_can_transfer(world, 0, 0).ok,
+			"po opravě čerpadlo zase jede")
+
+## Automatické čerpadlo (bez řídicí jednotky) přečerpá jednu kostku v momentě,
+## kdy jsou poprvé splněné podmínky přenosu, a pak čeká na další náběžnou
+## hranu (design dok. §2.2.1).
+func test_automatic_pump_fires_once_on_the_rising_edge() -> void:
+	var world := _pump_world(4, 0)
+	var events: Array = []
+	DeviceSystem.run_automatics(world, events)
+	t.equal(world.reservoirs[0].volume_units, 2, "první sepnutí přečerpalo kostku")
+	t.equal(world.reservoirs[1].volume_units, 2, "a přiteklo do cíle")
+
+	events.clear()
+	DeviceSystem.run_automatics(world, events)
+	t.equal(world.reservoirs[0].volume_units, 2, "podruhé už samo nesepne")
+	t.is_true(events.is_empty(), "a nevydá žádnou událost")
+
+	# Vypnutá skříň podmínku poruší; po zapnutí přijde nová náběžná hrana.
+	world.devices[0].is_on = false
+	DeviceSystem.run_automatics(world, events)
+	world.devices[0].is_on = true
+	DeviceSystem.run_automatics(world, events)
+	t.equal(world.reservoirs[0].volume_units, 0, "po obnovení podmínek sepne znovu")
+
+func test_automatic_pump_waits_until_the_target_has_room() -> void:
+	# Cíl je plný (kapacita 12 jednotek, viz test výše — 6 buněk po 2).
+	var world := _pump_world(4, 12)
+	var events: Array = []
+	DeviceSystem.run_automatics(world, events)
+	t.equal(world.reservoirs[0].volume_units, 4, "do plné nádrže se nečerpá")
+	t.is_true(events.is_empty(), "a nic se nestane")

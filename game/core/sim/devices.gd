@@ -54,13 +54,17 @@ static func platform_riders(world: WorldState, platform_index: int) -> Array:
 			riders.append(i)
 	return riders
 
+## Hmotnostní limit je **spouštěcí práh**, ne horní mez nosnosti (design dok.
+## §2.2.1): plošina se rozjede, teprve když je na ní aspoň `weight_limit`
+## hmotnosti. Těžší náklad ji nezastaví. Práh platí pro automatickou
+## i manuální plošinu stejně.
 static func platform_can_move(world: WorldState, platform_index: int) -> Validation:
 	var platform: PlatformState = world.platforms[platform_index]
 	if not cabinets_powered(world, platform.linked_cabinets):
 		return Validation.reject("plošina není pod napětím")
 	var total_load := platform_load(world, platform_index)
-	if total_load > platform.weight_limit:
-		return Validation.reject("překročená nosnost plošiny")
+	if total_load < platform.weight_limit:
+		return Validation.reject("na plošině není dost hmotnosti pro spuštění")
 
 	var target_pose := 1 - platform.current_pose
 	var delta := platform.offset_of_pose(target_pose) - platform.current_offset()
@@ -125,6 +129,15 @@ static func move_platform(world: WorldState, platform_index: int, validation: Va
 		world.set_block(target, entry[1])
 		world.set_orientation(target, entry[2])
 
+	# 4) zařízení v kostkách plošiny jsou její pevnou součástí a jedou s ní
+	#    (design dok. §2.2.1); jinak se ani přesunout, ani zničit nedají.
+	var carried_cells := {}
+	for entry in carried:
+		carried_cells[entry[0]] = true
+	for device in world.devices:
+		if carried_cells.has(device.cell):
+			device.cell += delta
+
 	platform.current_pose = validation.data["target_pose"]
 	out_events.append(Event.platform_moved(platform_index, from_offset,
 			platform.current_offset()))
@@ -133,7 +146,7 @@ static func move_platform(world: WorldState, platform_index: int, validation: Va
 
 static func pump_can_transfer(world: WorldState, pump_index: int, direction: int) -> Validation:
 	var pump: PumpState = world.pumps[pump_index]
-	if not cabinets_powered(world, [pump.linked_cabinet]):
+	if not cabinets_powered(world, pump.linked_cabinets):
 		return Validation.reject("čerpadlo není pod napětím")
 	var source := pump.source_reservoir(direction)
 	var target := pump.target_reservoir(direction)
@@ -222,8 +235,10 @@ static func run_automatics(world: WorldState, out_events: Array) -> void:
 		var platform: PlatformState = world.platforms[platform_index]
 		if platform.is_manual():
 			continue
-		var ready := platform_load(world, platform_index) >= platform.weight_limit \
-				and platform.weight_limit > 0
+		# Práh 0 by automatickou plošinu rozjel hned na startu levelu — editor
+		# proto u automatické plošiny vyžaduje práh ≥ 1 (V16).
+		var ready := platform.weight_limit > 0 \
+				and platform_load(world, platform_index) >= platform.weight_limit
 		if not ready:
 			platform.trigger_latched = false
 			continue
@@ -235,17 +250,21 @@ static func run_automatics(world: WorldState, out_events: Array) -> void:
 		move_platform(world, platform_index, validation, out_events)
 		platform.trigger_latched = true
 
+	# Automatické čerpadlo přečerpá jednu kostku vody v momentě, kdy jsou
+	# poprvé splněné všechny podmínky přenosu (design dok. §2.2.1): všechny
+	# napojené skříně jsou opravené a pod napětím, ve zdroji je aspoň kostka
+	# vody, v cíli aspoň kostka volné kapacity a nikdo se přenosem neutopí.
+	# Přesně tyhle podmínky ověřuje pump_can_transfer — automatika tedy jen
+	# sleduje náběžnou hranu jejího výsledku.
 	for pump_index in world.pumps.size():
 		var pump: PumpState = world.pumps[pump_index]
 		if pump.is_manual():
 			continue
-		if not cabinets_powered(world, [pump.linked_cabinet]):
+		var validation := pump_can_transfer(world, pump_index, pump.current_direction)
+		if not validation.ok:
 			pump.trigger_latched = false
 			continue
 		if pump.trigger_latched:
-			continue
-		var validation := pump_can_transfer(world, pump_index, pump.current_direction)
-		if not validation.ok:
 			continue
 		transfer(world, pump_index, validation, out_events)
 		pump.trigger_latched = true

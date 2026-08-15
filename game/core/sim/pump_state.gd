@@ -11,10 +11,10 @@ var reservoir_b: int = 0
 var bidirectional: bool = false
 var default_direction: int = 0     # 0 = A→B, 1 = B→A
 var current_direction: int = 0     # u SWITCH se střídá
-var linked_cabinet: int = -1
+var linked_cabinets: Array = []    # indexy do WorldState.devices
 var linked_control_unit: int = -1  # -1 → automatické
-## Automatické čerpadlo přečerpá jednou na náběžné hraně napájení, ne každý
-## příkaz — stejný důvod jako u plošiny (§13.2).
+## Automatické čerpadlo přečerpá jednou na náběžné hraně splnění všech
+## podmínek přenosu, ne každý příkaz — stejný důvod jako u plošiny (§13.2).
 var trigger_latched: bool = false
 
 func is_manual() -> bool:
@@ -33,7 +33,7 @@ func duplicate_state() -> PumpState:
 	copy.bidirectional = bidirectional
 	copy.default_direction = default_direction
 	copy.current_direction = current_direction
-	copy.linked_cabinet = linked_cabinet
+	copy.linked_cabinets = linked_cabinets.duplicate()
 	copy.linked_control_unit = linked_control_unit
 	copy.trigger_latched = trigger_latched
 	return copy

@@ -71,4 +71,7 @@ func test_core_classes_do_not_extend_node() -> void:
 	t.is_true(sim is RefCounted, "Simulation je RefCounted")
 	t.is_true(sim.world is RefCounted, "WorldState je RefCounted")
 	t.is_true(level is RefCounted, "LevelData je RefCounted")
-	t.is_false(sim is Node, "a nic z toho není Node")
+	# `sim is Node` neprojde ani překladem (statická analýza ví, že Simulation
+	# Node být nemůže) — běhový dotaz přes is_instance_of dělá totéž a je
+	# odolný vůči pozdější změně hierarchie.
+	t.is_false(is_instance_of(sim, Node), "a nic z toho není Node")

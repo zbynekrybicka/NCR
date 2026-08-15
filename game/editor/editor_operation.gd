@@ -244,6 +244,335 @@ class MoveKey extends EditorOperation:
 		return "přesun klíče na %s" % cell
 
 
+## Umístění elektrické skříně / řídicí jednotky. Zařízení zabírá vlastní
+## kostku, která se chová jako zeď (design dok. §2.2.1) — operace proto
+## současně nastaví na dané buňce blok WALL. Zařízení už na buňce stojící
+## se nahradí.
+class PlaceDevice extends EditorOperation:
+	var cell: Vector3i
+	var kind: int
+	var control_mode: int
+	var access_direction: int
+	var is_broken: bool
+	var _old_block: int = 0
+	var _old_model: int = 0
+	var _old_orientation: int = 0
+	var _replaced_index: int = -1
+	var _replaced: LevelData.DeviceDef = null
+
+	func _init(p_cell: Vector3i, p_kind: int, p_access_direction: int,
+			p_control_mode: int = 0, p_is_broken: bool = false) -> void:
+		cell = p_cell
+		kind = p_kind
+		access_direction = p_access_direction
+		control_mode = p_control_mode
+		is_broken = p_is_broken
+
+	func apply(level: LevelData) -> void:
+		_old_block = level.block_at(cell)
+		_old_model = level.model_at(cell)
+		_old_orientation = level.orientation_at(cell)
+		_replaced_index = -1
+		_replaced = null
+		for i in level.devices.size():
+			if level.devices[i].cell == cell:
+				_replaced_index = i
+				_replaced = level.devices[i].duplicate_def()
+				level.devices.remove_at(i)
+				break
+		level.set_block(cell, GridTypes.BlockType.WALL)
+		level.set_orientation(cell, access_direction)
+		level.devices.append(LevelData.DeviceDef.new(kind, control_mode, cell,
+				access_direction, is_broken))
+		if _replaced_index != -1:
+			# Nahrazení na stejném indexu — vazby plošin a čerpadel na zařízení
+			# jsou číselné a nesmí se posunout.
+			var placed = level.devices.pop_back()
+			level.devices.insert(_replaced_index, placed)
+
+	func revert(level: LevelData) -> void:
+		for i in range(level.devices.size() - 1, -1, -1):
+			if level.devices[i].cell == cell:
+				level.devices.remove_at(i)
+				break
+		if _replaced != null:
+			level.devices.insert(_replaced_index, _replaced.duplicate_def())
+		level.set_block(cell, _old_block)
+		level.set_model(cell, _old_model)
+		level.set_orientation(cell, _old_orientation)
+
+	func describe() -> String:
+		return "umístění zařízení na %s" % cell
+
+
+## Odebrání zařízení i kostky zdi, ve které sedí. Vazby plošin a čerpadel na
+## zařízení jsou číselné, takže se odebráním přečíslují — operace to udělá
+## sama, aby level zůstal validní (V17).
+class RemoveDevice extends EditorOperation:
+	var cell: Vector3i
+	var _removed_index: int = -1
+	var _removed: LevelData.DeviceDef = null
+	var _old_block: int = 0
+	var _platform_links: Array = []   # [cabinets, control_units] před operací
+	var _pump_links: Array = []       # [cabinets, control_unit] před operací
+
+	func _init(p_cell: Vector3i) -> void:
+		cell = p_cell
+
+	func apply(level: LevelData) -> void:
+		_removed_index = -1
+		for i in level.devices.size():
+			if level.devices[i].cell == cell:
+				_removed_index = i
+				_removed = level.devices[i].duplicate_def()
+				break
+		if _removed_index == -1:
+			return
+		_old_block = level.block_at(cell)
+		_platform_links = []
+		for platform in level.platforms:
+			_platform_links.append([platform.linked_cabinets.duplicate(),
+					platform.linked_control_units.duplicate()])
+		_pump_links = []
+		for pump in level.pumps:
+			_pump_links.append([pump.linked_cabinets.duplicate(), pump.linked_control_unit])
+
+		level.devices.remove_at(_removed_index)
+		level.set_block(cell, GridTypes.BlockType.EMPTY)
+		for platform in level.platforms:
+			platform.linked_cabinets = _shift(platform.linked_cabinets, _removed_index)
+			platform.linked_control_units = _shift(platform.linked_control_units, _removed_index)
+		for pump in level.pumps:
+			pump.linked_cabinets = _shift(pump.linked_cabinets, _removed_index)
+			pump.linked_control_unit = _shift_one(pump.linked_control_unit, _removed_index)
+
+	func revert(level: LevelData) -> void:
+		if _removed == null:
+			return
+		level.devices.insert(_removed_index, _removed.duplicate_def())
+		level.set_block(cell, _old_block)
+		for i in level.platforms.size():
+			level.platforms[i].linked_cabinets = _platform_links[i][0].duplicate()
+			level.platforms[i].linked_control_units = _platform_links[i][1].duplicate()
+		for i in level.pumps.size():
+			level.pumps[i].linked_cabinets = _pump_links[i][0].duplicate()
+			level.pumps[i].linked_control_unit = _pump_links[i][1]
+
+	## Odkazy na odebrané zařízení zmizí, vyšší indexy se posunou o jedna dolů.
+	static func _shift(indices: Array, removed: int) -> Array:
+		var out: Array = []
+		for index in indices:
+			if index == removed:
+				continue
+			out.append(index - 1 if index > removed else index)
+		return out
+
+	static func _shift_one(index: int, removed: int) -> int:
+		if index == removed:
+			return -1
+		return index - 1 if index > removed else index
+
+	func describe() -> String:
+		return "odebrání zařízení na %s" % cell
+
+
+## Založení nebo úprava nádrže. Tvar se neukládá — odvozuje se z geometrie
+## zdí (§9.1), definice nese jen kotevní buňku, počáteční objem a příznak
+## neomezenosti (design dok. §2.2.1).
+class SetReservoir extends EditorOperation:
+	var anchor: Vector3i
+	var volume_units: int
+	var unlimited: bool
+	var _existing_index: int = -1
+	var _previous: LevelData.ReservoirDef = null
+
+	func _init(p_anchor: Vector3i, p_volume_units: int, p_unlimited: bool = false) -> void:
+		anchor = p_anchor
+		volume_units = p_volume_units
+		unlimited = p_unlimited
+
+	func apply(level: LevelData) -> void:
+		_existing_index = -1
+		_previous = null
+		for i in level.reservoirs.size():
+			if level.reservoirs[i].anchor == anchor:
+				_existing_index = i
+				_previous = level.reservoirs[i].duplicate_def()
+				break
+		var def := LevelData.ReservoirDef.new(anchor, volume_units, unlimited)
+		if _existing_index == -1:
+			level.reservoirs.append(def)
+		else:
+			level.reservoirs[_existing_index] = def
+
+	func revert(level: LevelData) -> void:
+		if _existing_index == -1:
+			for i in range(level.reservoirs.size() - 1, -1, -1):
+				if level.reservoirs[i].anchor == anchor:
+					level.reservoirs.remove_at(i)
+					break
+			return
+		level.reservoirs[_existing_index] = _previous.duplicate_def()
+
+	func describe() -> String:
+		return "nastavení nádrže na %s" % anchor
+
+
+## Odebrání nádrže. Čerpadla na nádrže odkazují číslem, takže se odkazy
+## přečíslují a čerpadlo, které o nádrž přišlo, se odebere taky (V10).
+class RemoveReservoir extends EditorOperation:
+	var anchor: Vector3i
+	var _removed_index: int = -1
+	var _removed: LevelData.ReservoirDef = null
+	var _old_pumps: Array = []
+
+	func _init(p_anchor: Vector3i) -> void:
+		anchor = p_anchor
+
+	func apply(level: LevelData) -> void:
+		_removed_index = -1
+		for i in level.reservoirs.size():
+			if level.reservoirs[i].anchor == anchor:
+				_removed_index = i
+				_removed = level.reservoirs[i].duplicate_def()
+				break
+		if _removed_index == -1:
+			return
+		_old_pumps = []
+		for pump in level.pumps:
+			_old_pumps.append(pump.duplicate_def())
+		level.reservoirs.remove_at(_removed_index)
+		for i in range(level.pumps.size() - 1, -1, -1):
+			var pump = level.pumps[i]
+			if pump.reservoir_a == _removed_index or pump.reservoir_b == _removed_index:
+				level.pumps.remove_at(i)
+				continue
+			if pump.reservoir_a > _removed_index:
+				pump.reservoir_a -= 1
+			if pump.reservoir_b > _removed_index:
+				pump.reservoir_b -= 1
+
+	func revert(level: LevelData) -> void:
+		if _removed == null:
+			return
+		level.reservoirs.insert(_removed_index, _removed.duplicate_def())
+		level.pumps.clear()
+		for pump in _old_pumps:
+			level.pumps.append(pump.duplicate_def())
+
+	func describe() -> String:
+		return "odebrání nádrže na %s" % anchor
+
+
+## Přidání transportní plošiny. `cells` jsou buňky zdí v poloze A, `pose_b`
+## je posun druhé polohy vůči první (§13.2); `weight_limit` je spouštěcí
+## práh (design dok. §2.2.1).
+class AddPlatform extends EditorOperation:
+	var cells: Array
+	var pose_b: Vector3i
+	var weight_limit: int
+	var cabinets: Array
+	var control_units: Array
+
+	func _init(p_cells: Array, p_pose_b: Vector3i, p_weight_limit: int,
+			p_cabinets: Array, p_control_units: Array = []) -> void:
+		cells = p_cells.duplicate()
+		pose_b = p_pose_b
+		weight_limit = p_weight_limit
+		cabinets = p_cabinets.duplicate()
+		control_units = p_control_units.duplicate()
+
+	func apply(level: LevelData) -> void:
+		var def := LevelData.PlatformDef.new()
+		def.cells = cells.duplicate()
+		def.pose_a = Vector3i.ZERO
+		def.pose_b = pose_b
+		def.weight_limit = weight_limit
+		def.linked_cabinets = cabinets.duplicate()
+		def.linked_control_units = control_units.duplicate()
+		level.platforms.append(def)
+
+	func revert(level: LevelData) -> void:
+		if not level.platforms.is_empty():
+			level.platforms.pop_back()
+
+	func describe() -> String:
+		return "přidání plošiny (%d buněk)" % cells.size()
+
+
+class RemovePlatform extends EditorOperation:
+	var index: int
+	var _removed: LevelData.PlatformDef = null
+
+	func _init(p_index: int) -> void:
+		index = p_index
+
+	func apply(level: LevelData) -> void:
+		if index < 0 or index >= level.platforms.size():
+			return
+		_removed = level.platforms[index].duplicate_def()
+		level.platforms.remove_at(index)
+
+	func revert(level: LevelData) -> void:
+		if _removed != null:
+			level.platforms.insert(index, _removed.duplicate_def())
+
+	func describe() -> String:
+		return "odebrání plošiny %d" % index
+
+
+## Přidání čerpadla mezi dvě nádrže (§13.3). Bez řídicí jednotky
+## (`control_unit == -1`) je čerpadlo automatické.
+class AddPump extends EditorOperation:
+	var reservoir_a: int
+	var reservoir_b: int
+	var bidirectional: bool
+	var default_direction: int
+	var cabinets: Array
+	var control_unit: int
+
+	func _init(p_a: int, p_b: int, p_cabinets: Array, p_control_unit: int = -1,
+			p_bidirectional: bool = false, p_default_direction: int = 0) -> void:
+		reservoir_a = p_a
+		reservoir_b = p_b
+		cabinets = p_cabinets.duplicate()
+		control_unit = p_control_unit
+		bidirectional = p_bidirectional
+		default_direction = p_default_direction
+
+	func apply(level: LevelData) -> void:
+		level.pumps.append(LevelData.PumpDef.new(reservoir_a, reservoir_b, bidirectional,
+				default_direction, cabinets, control_unit))
+
+	func revert(level: LevelData) -> void:
+		if not level.pumps.is_empty():
+			level.pumps.pop_back()
+
+	func describe() -> String:
+		return "přidání čerpadla %d → %d" % [reservoir_a, reservoir_b]
+
+
+class RemovePump extends EditorOperation:
+	var index: int
+	var _removed: LevelData.PumpDef = null
+
+	func _init(p_index: int) -> void:
+		index = p_index
+
+	func apply(level: LevelData) -> void:
+		if index < 0 or index >= level.pumps.size():
+			return
+		_removed = level.pumps[index].duplicate_def()
+		level.pumps.remove_at(index)
+
+	func revert(level: LevelData) -> void:
+		if _removed != null:
+			level.pumps.insert(index, _removed.duplicate_def())
+
+	func describe() -> String:
+		return "odebrání čerpadla %d" % index
+
+
 ## Změna rozměrů levelu. Zmenšení maže zasažené objekty (design dok. §2.2.1).
 class Resize extends EditorOperation:
 	var new_size: Vector3i
@@ -282,6 +611,10 @@ class Resize extends EditorOperation:
 		level.pumps = restored.pumps
 		level.key_position = restored.key_position
 
+	## Zmenšení levelu smaže zasažené objekty. Zařízení i nádrže se odkazují
+	## číslem (plošiny, čerpadla), takže se odkazy přemapují a mechanismus,
+	## který přišel o povinnou vazbu, se odebere celý — jinak by po zmenšení
+	## zůstal level nevalidní (V10, V17).
 	func _drop_outside(level: LevelData) -> void:
 		for i in range(level.items.size() - 1, -1, -1):
 			if not level.is_inside(level.items[i].cell):
@@ -289,12 +622,56 @@ class Resize extends EditorOperation:
 		for i in range(level.robots.size() - 1, -1, -1):
 			if not level.is_inside(level.robots[i].cell):
 				level.robots.remove_at(i)
-		for i in range(level.devices.size() - 1, -1, -1):
+
+		var device_map := {}
+		var kept_devices: Array = []
+		for i in level.devices.size():
 			if not level.is_inside(level.devices[i].cell):
-				level.devices.remove_at(i)
-		for i in range(level.reservoirs.size() - 1, -1, -1):
+				continue
+			device_map[i] = kept_devices.size()
+			kept_devices.append(level.devices[i])
+		level.devices = kept_devices
+
+		var reservoir_map := {}
+		var kept_reservoirs: Array = []
+		for i in level.reservoirs.size():
 			if not level.is_inside(level.reservoirs[i].anchor):
-				level.reservoirs.remove_at(i)
+				continue
+			reservoir_map[i] = kept_reservoirs.size()
+			kept_reservoirs.append(level.reservoirs[i])
+		level.reservoirs = kept_reservoirs
+
+		for i in range(level.platforms.size() - 1, -1, -1):
+			var platform = level.platforms[i]
+			var outside := false
+			for cell in platform.cells:
+				if not level.is_inside(cell + platform.pose_a) \
+						or not level.is_inside(cell + platform.pose_b):
+					outside = true
+					break
+			platform.linked_cabinets = _remap(platform.linked_cabinets, device_map)
+			platform.linked_control_units = _remap(platform.linked_control_units, device_map)
+			if outside or platform.linked_cabinets.is_empty():
+				level.platforms.remove_at(i)
+
+		for i in range(level.pumps.size() - 1, -1, -1):
+			var pump = level.pumps[i]
+			if not reservoir_map.has(pump.reservoir_a) or not reservoir_map.has(pump.reservoir_b):
+				level.pumps.remove_at(i)
+				continue
+			pump.reservoir_a = reservoir_map[pump.reservoir_a]
+			pump.reservoir_b = reservoir_map[pump.reservoir_b]
+			pump.linked_cabinets = _remap(pump.linked_cabinets, device_map)
+			pump.linked_control_unit = int(device_map.get(pump.linked_control_unit, -1))
+			if pump.linked_cabinets.is_empty():
+				level.pumps.remove_at(i)
+
+	static func _remap(indices: Array, mapping: Dictionary) -> Array:
+		var out: Array = []
+		for index in indices:
+			if mapping.has(index):
+				out.append(mapping[index])
+		return out
 
 	func describe() -> String:
 		return "změna rozměrů na %s" % new_size

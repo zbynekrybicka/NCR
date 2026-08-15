@@ -21,6 +21,9 @@ const RULE_NAMES := {
 	"V12": "sekvence robotů je úplná permutace",
 	"V13": "počáteční objem nádrže ≤ její kapacita",
 	"V14": "žádný robot nezačíná v hluboké vodě (kromě Dula)",
+	"V15": "zařízení stojí ve vlastní kostce zdi na pevném podkladu, ovládané z vodorovného směru",
+	"V16": "plošina se skládá ze zdí, nepřekrývá se s jinou plošinou a automatická má práh ≥ 1",
+	"V17": "plošina i čerpadlo odkazují na existující skříně a řídicí jednotky",
 }
 
 ## Vrátí seznam popsaných porušení; prázdné pole = level je v pořádku.
@@ -38,6 +41,7 @@ static func validate(level: LevelData) -> Array:
 	_check_floating(level, problems)
 	_check_ramps(level, problems)
 	_check_ice(level, world, problems)
+	_check_devices(level, problems)
 	_check_platforms(level, problems)
 	_check_pumps(level, problems)
 	_check_reservoirs(level, world, problems)
@@ -146,16 +150,82 @@ static func _check_ice(level: LevelData, world: WorldState, problems: Array) -> 
 		if world.reservoir_at(cell) == -1:
 			_fail(problems, "V7", "led na %s není uvnitř nádrže" % cell)
 
-# ── V8, V9 ─────────────────────────────────────────────────────────────────
+# ── V15 ────────────────────────────────────────────────────────────────────
+
+## Zařízení zabírá vlastní kostku, která se chová jako zeď (design dok.
+## §2.2.1): buňka musí obsahovat WALL, musí mít pod sebou pevný podklad
+## a ovládat se dá jen z vodorovného směru (Il stojí vedle, ne nad/pod).
+static func _check_devices(level: LevelData, problems: Array) -> void:
+	var occupied := {}
+	for i in level.devices.size():
+		var device = level.devices[i]
+		var label := "%s %d" % [_device_label(device.kind), i]
+		if not level.is_inside(device.cell):
+			_fail(problems, "V15", "%s je mimo level" % label)
+			continue
+		if occupied.has(device.cell):
+			_fail(problems, "V15", "%s sdílí buňku %s s jiným zařízením"
+					% [label, device.cell])
+		occupied[device.cell] = i
+		if level.block_at(device.cell) != GridTypes.BlockType.WALL:
+			_fail(problems, "V15", "%s na %s nestojí v kostce zdi" % [label, device.cell])
+		if not GridTypes.is_solid(level.block_at(device.cell + GridTypes.DOWN_VECTOR)):
+			_fail(problems, "V15", "%s na %s nemá pevný podklad" % [label, device.cell])
+		if not GridTypes.is_horizontal(device.access_direction):
+			_fail(problems, "V15", "%s na %s se ovládá ze svislého směru"
+					% [label, device.cell])
+		if level.robot_at(device.cell) != -1:
+			_fail(problems, "V15", "%s na %s sdílí buňku s robotem" % [label, device.cell])
+
+static func _device_label(kind: int) -> String:
+	return "elektrická skříň" if kind == GridTypes.DeviceKind.POWER_CABINET \
+			else "řídicí jednotka"
+
+## Odkaz na zařízení očekávaného druhu (V17).
+static func _check_device_link(level: LevelData, index: int, kind: int, owner: String,
+		problems: Array) -> void:
+	if index < 0 or index >= level.devices.size():
+		_fail(problems, "V17", "%s odkazuje na neexistující zařízení %d" % [owner, index])
+		return
+	if level.devices[index].kind != kind:
+		_fail(problems, "V17", "%s odkazuje na zařízení %d, které není %s"
+				% [owner, index, _device_label(kind)])
+
+# ── V8, V9, V16, V17 ───────────────────────────────────────────────────────
 
 static func _check_platforms(level: LevelData, problems: Array) -> void:
+	var claimed := {}   # buňka v poloze A -> index plošiny
 	for i in level.platforms.size():
 		var platform = level.platforms[i]
 		if platform.linked_cabinets.is_empty():
 			_fail(problems, "V9", "plošina %d nemá elektrickou skříň" % i)
+		for cabinet in platform.linked_cabinets:
+			_check_device_link(level, cabinet, GridTypes.DeviceKind.POWER_CABINET,
+					"plošina %d" % i, problems)
+		for unit in platform.linked_control_units:
+			_check_device_link(level, unit, GridTypes.DeviceKind.CONTROL_UNIT,
+					"plošina %d" % i, problems)
+		# Práh 0 by automatickou plošinu rozjel hned na startu levelu; manuální
+		# plošina prahem 0 znamená „jede i prázdná", což je v pořádku.
+		if platform.linked_control_units.is_empty() and platform.weight_limit < 1:
+			_fail(problems, "V16",
+					"automatická plošina %d má nulový spouštěcí práh" % i)
 		if platform.cells.is_empty():
 			_fail(problems, "V8", "plošina %d nemá žádné buňky" % i)
 			continue
+		# Plošina se skládá ze série zdí (design dok. §2.2.1).
+		for cell in platform.cells:
+			var start: Vector3i = cell + platform.pose_a
+			if level.block_at(start) != GridTypes.BlockType.WALL:
+				_fail(problems, "V16",
+						"plošina %d má na %s jinou buňku než zeď" % [i, start])
+			if claimed.has(start):
+				_fail(problems, "V16", "buňku %s sdílí plošiny %d a %d"
+						% [start, claimed[start], i])
+			else:
+				claimed[start] = i
+			# Zařízení v kostce plošiny je povolené — je její pevnou součástí
+			# a jede s ní (design dok. §2.2.1, §13.2).
 		var own_cells := {}
 		for cell in platform.cells:
 			own_cells[cell + platform.pose_a] = true
@@ -199,6 +269,14 @@ static func _check_pumps(level: LevelData, problems: Array) -> void:
 		if pump.reservoir_a == pump.reservoir_b:
 			_fail(problems, "V10", "čerpadlo %d čerpá z nádrže do ní samé" % i)
 			continue
+		if pump.linked_cabinets.is_empty():
+			_fail(problems, "V10", "čerpadlo %d nemá elektrickou skříň" % i)
+		for cabinet in pump.linked_cabinets:
+			_check_device_link(level, cabinet, GridTypes.DeviceKind.POWER_CABINET,
+					"čerpadlo %d" % i, problems)
+		if pump.linked_control_unit != -1:
+			_check_device_link(level, pump.linked_control_unit,
+					GridTypes.DeviceKind.CONTROL_UNIT, "čerpadlo %d" % i, problems)
 		var sources: Array = [pump.default_direction]
 		if pump.bidirectional:
 			sources = [0, 1]

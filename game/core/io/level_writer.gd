@@ -144,7 +144,9 @@ static func _chunk_pumps(level: LevelData) -> PackedByteArray:
 		stream.put_u16(pump.reservoir_b)
 		stream.put_u8(1 if pump.bidirectional else 0)
 		stream.put_u8(pump.default_direction)
-		stream.put_16(pump.linked_cabinet)
+		stream.put_u16(pump.linked_cabinets.size())
+		for index in pump.linked_cabinets:
+			stream.put_u16(index)
 		stream.put_16(pump.linked_control_unit)
 	return stream.data_array
 

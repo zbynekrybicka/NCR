@@ -64,7 +64,12 @@ func submit_command(command: Command) -> Command.Result:
 	if not validation.ok:
 		return _reject(command, validation.reason)
 
-	_apply(command, robot_index, validation, result.events)
+	# Vstup do ovládaného zařízení se dá vyhodnotit až v aplikační fázi (závisí
+	# na stavu plošin a čerpadel). Když se nic nestalo, je to odmítnutý příkaz
+	# jako každý jiný — nic se nezměnilo, takže se nesmí hlásit jako přijatý (P5).
+	var apply_error := _apply(command, robot_index, validation, result.events)
+	if apply_error != "":
+		return _reject(command, apply_error)
 	_settle(result.events)
 	_check_invariants()
 	_check_postconditions(result.events)
@@ -166,8 +171,10 @@ func is_safe_to_leave(robot_index: int) -> bool:
 
 # ── 2. Aplikace ────────────────────────────────────────────────────────────
 
+## Vrátí prázdný řetězec, když se příkaz provedl; jinak důvod, proč se
+## neprovedl (jen DEVICE_INPUT — ostatní příkazy rozhoduje validace).
 func _apply(command: Command, robot_index: int, validation: Validation,
-		out_events: Array) -> void:
+		out_events: Array) -> String:
 	var robot: RobotState = world.robots[robot_index]
 	match command.type:
 		Command.CommandType.TURN_LEFT:
@@ -199,7 +206,8 @@ func _apply(command: Command, robot_index: int, validation: Validation,
 		Command.CommandType.DEVICE_INPUT:
 			var device_validation := DeviceSystem.device_input(world, robot_index, out_events)
 			if not device_validation.ok:
-				out_events.append(Event.command_rejected(command.type, device_validation.reason))
+				return device_validation.reason
+	return ""
 
 func _turn(robot_index: int, new_facing: int, out_events: Array) -> void:
 	var robot: RobotState = world.robots[robot_index]

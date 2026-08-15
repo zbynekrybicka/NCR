@@ -97,10 +97,10 @@ func platform(cells: Array, pose_a: Vector3i, pose_b: Vector3i, weight_limit: in
 	_platforms.append(def)
 	return self
 
-func pump(reservoir_a: int, reservoir_b: int, cabinet: int, control_unit: int = -1,
+func pump(reservoir_a: int, reservoir_b: int, cabinets: Array, control_unit: int = -1,
 		bidirectional: bool = false, default_direction: int = 0) -> LevelBuilder:
 	_pumps.append(LevelData.PumpDef.new(reservoir_a, reservoir_b, bidirectional,
-			default_direction, cabinet, control_unit))
+			default_direction, cabinets, control_unit))
 	return self
 
 func build() -> LevelData:

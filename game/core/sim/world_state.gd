@@ -82,7 +82,7 @@ static func from_level(level: LevelData) -> WorldState:
 		pump.bidirectional = def.bidirectional
 		pump.default_direction = def.default_direction
 		pump.current_direction = def.default_direction
-		pump.linked_cabinet = def.linked_cabinet
+		pump.linked_cabinets = def.linked_cabinets.duplicate()
 		pump.linked_control_unit = def.linked_control_unit
 		world.pumps.append(pump)
 
