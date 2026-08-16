@@ -19,11 +19,12 @@ func validate(world: WorldState, robot_index: int) -> Validation:
 			return Validation.reject("v nádrži není dost vody")
 		return Validation.accept({"reservoir": here_index})
 
-	# ze břehu
+	# ze břehu — nádrž leží buď v rovině robota, nebo (běžný břeh) o patro níž;
+	# jak vysoko v ní sahá hladina, neřeší poloha buňky, ale poměr zaplnění.
 	var ahead := ActionHelpers.ahead_cell(world, robot_index)
-	var ahead_index := world.reservoir_at(ahead)
-	if ahead_index == -1 or world.water_depth_at(ahead) == GridTypes.WaterDepth.DRY:
-		return Validation.reject("před robotem není voda")
+	var ahead_index := ActionHelpers.reservoir_within_reach(world, ahead)
+	if ahead_index == -1:
+		return Validation.reject("před robotem není nádrž")
 	var res: ReservoirState = world.reservoirs[ahead_index]
 	if not WaterSystem.fill_ratio_over_half(res):
 		return Validation.reject("nádrž je zaplněná na 50 % nebo míň")

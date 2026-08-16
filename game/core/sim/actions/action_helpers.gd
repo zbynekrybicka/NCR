@@ -34,6 +34,21 @@ static func no_robot_at(world: WorldState, cell: Vector3i, ignore_index: int = -
 static func landing_cell_for_drop(world: WorldState, start: Vector3i) -> Vector3i:
 	return Gravity.landing_cell_for_drop(world, start)
 
+## Dul a1/a2 — nádrž, na kterou Dul ze břehu dosáhne hadicí ve směru `cell`.
+## Robot stojící na břehu má nohy o patro výš než hladina (buňka v jeho rovině
+## je vzduch nad nádrží, sama členem nádrže není — voda by z ní přetekla na
+## břeh, takže ji §9.1 vyloučí z dutiny). Hledá se proto nejdřív v rovině
+## robota a pak o patro níž. Přes pevný blok (včetně ledu) hadice nedosáhne.
+static func reservoir_within_reach(world: WorldState, cell: Vector3i) -> int:
+	var probes: Array[Vector3i] = [cell, cell + GridTypes.DOWN_VECTOR]
+	for probe in probes:
+		if not world.is_inside(probe) or world.is_solid_at(probe):
+			return -1
+		var index := world.reservoir_at(probe)
+		if index != -1:
+			return index
+	return -1
+
 static func has_item(world: WorldState, robot_index: int, item: int) -> bool:
 	var robot: RobotState = world.robots[robot_index]
 	return robot.has_item(item)

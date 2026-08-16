@@ -812,11 +812,22 @@ Rozhodovací logika je potřeba i mimo krok. Design dokument §2.1.2 ji zmiňuje
            Emit(PumpSource.HERE)
          Sequence "ze břehu":
            Condition water_depth_here == DRY      → TRUE
-           Condition ahead_is_water               → TRUE
+           Condition reservoir_within_reach(ahead) != -1  → TRUE
+                                                     # nádrž před robotem: buď
+                                                     # v jeho rovině, nebo o patro
+                                                     # níž — na běžném břehu dutina
+                                                     # k rovině nohou nesahá (§9.1),
+                                                     # stejná úvaha jako u predikátu
+                                                     # water_ahead_is_boardable.
+                                                     # Přes pevný blok (i led) se
+                                                     # nedosáhne.
            Condition reservoir_fill_ratio(ahead) > 1/2   → TRUE
                                                      # celočíselně: 2 * volume_units
                                                      # > capacity_units, stejný
-                                                     # vzorec jako §9.4
+                                                     # vzorec jako §9.4. Jak vysoko
+                                                     # hladina sahá, řeší jen tenhle
+                                                     # poměr — ne poloha buňky, do
+                                                     # které Dul kouká.
            Emit(PumpSource.AHEAD)
          Fail
        # apply(): volume_units -2 v dané nádrži (plná cisterna = 2 jednotky,
@@ -833,11 +844,16 @@ Rozhodovací logika je potřeba i mimo krok. Design dokument §2.1.2 ji zmiňuje
 
      Sequence "akce 2 dul":
        Condition hopper_is_full                 → TRUE
-       Condition behind_is_water                → TRUE   (ze břehu i z vody
-                                                    za sebou — "behind" zahrnuje
-                                                    i pozici, kde Dul sám stojí
-                                                    ve vodě)
-       Condition raising_water_is_safe(reservoir_at(behind(1)), 2)  → TRUE
+       Condition reservoir_within_reach(behind) != -1  → TRUE
+                                                    (ze břehu i z vody za sebou —
+                                                    "behind" zahrnuje i pozici, kde
+                                                    Dul sám stojí ve vodě, a stejně
+                                                    jako u akce 1 i nádrž o patro
+                                                    níž, tzn. jámu pod hranou břehu.
+                                                    Voda v nádrži být nemusí —
+                                                    vypouští se i do prázdné oblasti
+                                                    určené k zatopení.)
+       Condition raising_water_is_safe(reservoir_within_reach(behind), 2)  → TRUE
                                                     # FALSE, pokud by některý
                                                     # jiný robot v nádrži
                                                     # (kromě Dula) utonul, §9.4

@@ -11,8 +11,10 @@ func validate(world: WorldState, robot_index: int) -> Validation:
 	if not robot.hopper_full:
 		return Validation.reject("cisterna je prázdná")
 
+	# Za robotem: nádrž v jeho rovině (stojí v ní, nebo je zeď nádrže vysoká),
+	# nebo o patro níž — to je běžný břeh (viz reservoir_within_reach).
 	var behind := ActionHelpers.behind_cell(world, robot_index)
-	var reservoir_index := world.reservoir_at(behind)
+	var reservoir_index := ActionHelpers.reservoir_within_reach(world, behind)
 	if reservoir_index == -1:
 		return Validation.reject("za robotem není nádrž")
 	if not WaterSystem.raising_water_is_safe(world, reservoir_index, GridTypes.UNITS_PER_CUBE):

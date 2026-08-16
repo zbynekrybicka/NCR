@@ -49,6 +49,59 @@ func test_pump_from_shore_needs_more_than_half() -> void:
 			"Dul stojí na suchu")
 	t.is_false(action_1(sim).accepted, "z nádrže zaplněné na polovinu se ze břehu nečerpá")
 
+# ── Čerpání a vypouštění ze břehu, kde hladina leží o patro níž ────────────
+#
+# Běžný břeh: nádrž je jáma v terénu (patro 1), Dul stojí na její hraně
+# v patře 2. Patro 2 je otevřené k okraji levelu, takže do nádrže nepatří
+# (§9.1) — nádrž je jen dno o kapacitě 4 jednotky.
+
+func _bank(volume: int, direction: int = GridTypes.Direction.EAST) -> Simulation:
+	return LevelBuilder.new() \
+		.layer(0, "#####\n#####\n#####") \
+		.layer(1, "#####\n##..#\n#####") \
+		.layer(2, ".....\n.U...\n.....") \
+		.facing(GridTypes.RobotKind.DUL, direction) \
+		.reservoir(Vector3i(2, 1, 1), volume) \
+		.simulate()
+
+func test_pump_from_the_bank_with_the_surface_a_storey_below() -> void:
+	var sim := _bank(3) # 3 ze 4 jednotek, tedy víc než 50 %
+	t.equal(sim.world.reservoir_at(Vector3i(1, 2, 1)), -1,
+			"Dul stojí na břehu, mimo nádrž")
+	t.equal(sim.world.water_depth_at(Vector3i(2, 2, 1)), GridTypes.WaterDepth.DRY,
+			"v jeho rovině před ním voda není — hladina je o patro níž")
+	t.is_true(action_1(sim).accepted, "ze břehu Dul načerpá i hladinu o patro níž")
+	t.equal(sim.world.reservoirs[0].volume_units, 1, "hladina klesla o kostku")
+	t.is_true(sim.world.robots[0].hopper_full, "cisterna je plná")
+
+func test_pump_from_the_bank_still_needs_more_than_half() -> void:
+	var sim := _bank(2) # přesně polovina kapacity
+	t.is_false(action_1(sim).accepted, "poloprázdná nádrž se ze břehu nečerpá")
+	t.equal(sim.world.reservoirs[0].volume_units, 2, "hladina zůstala beze změny")
+
+func test_release_from_the_bank_into_the_pit_below() -> void:
+	var sim := _bank(0, GridTypes.Direction.WEST) # vypouští se dozadu, tedy na východ
+	sim.world.robots[0].hopper_full = true
+	t.is_true(action_2(sim).accepted, "ze břehu Dul vypustí cisternu do jámy pod sebou")
+	t.equal(sim.world.reservoirs[0].volume_units, 2, "hladina stoupla o kostku")
+	t.is_false(sim.world.robots[0].hopper_full, "cisterna je prázdná")
+
+func test_release_from_the_bank_needs_a_reservoir_behind() -> void:
+	# Zrcadlo: Dul kouká do jámy, takže za ním je jen suchý břeh.
+	var sim := _bank(0)
+	sim.world.robots[0].hopper_full = true
+	t.is_false(action_2(sim).accepted, "na suchý břeh se cisterna nevypouští")
+
+func test_no_pumping_through_a_solid_block() -> void:
+	# Nádrž je zakrytá — před Dulem je zeď a voda až pod ní.
+	var sim := LevelBuilder.new() \
+		.layer(0, "#####\n#####\n#####") \
+		.layer(1, "#####\n##..#\n#####") \
+		.layer(2, ".....\n.U##.\n.....") \
+		.reservoir(Vector3i(2, 1, 1), 4) \
+		.simulate()
+	t.is_false(action_1(sim).accepted, "skrz pevný blok hadice nedosáhne")
+
 # ── Vstup do vody ze břehu (design dok. §1.1.2 + §2.1.4) ───────────────────
 #
 # Nádrž o dvou patrech: dno má kapacitu 4 jednotky (buňky 2 a 3 v patře 1),
