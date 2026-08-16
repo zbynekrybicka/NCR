@@ -156,15 +156,23 @@ static func pump_can_transfer(world: WorldState, pump_index: int, direction: int
 		return Validation.reject("cílová nádrž neexistuje")
 	var source_res: ReservoirState = world.reservoirs[source]
 	if source_res.unlimited:
-		# Z neomezené nádrže čerpadlo čerpat nesmí (§13.3, editor V10).
+		# Z neomezené nádrže čerpadlo čerpat nesmí (§13.3, editor V10) — neměla
+		# by definovaný „celý obsah", který by šlo přečerpat.
 		return Validation.reject("čerpadlo nesmí čerpat z neomezené nádrže")
-	if not WaterSystem.lowering_water_is_possible(world, source, PumpState.TRANSFER_UNITS):
-		return Validation.reject("ve zdrojové nádrži není dost vody")
+
+	# Jedno sepnutí přečerpá CELÝ obsah zdroje, ne pevnou kostku (design dok.
+	# §2.2.1). Buď se přečerpá všechno, nebo nic — částečný přenos neexistuje.
+	var units := source_res.volume_units
+	if units <= 0:
+		return Validation.reject("zdrojová nádrž je prázdná")
+	var target_res: ReservoirState = world.reservoirs[target]
+	if not target_res.unlimited \
+			and target_res.total_capacity() - target_res.volume_units < units:
+		return Validation.reject("v cílové nádrži není dost volné kapacity")
 	# Přenos, který by někoho utopil, se neprovede vůbec — ani zčásti (§9.4).
-	if not WaterSystem.raising_water_is_safe(world, target, PumpState.TRANSFER_UNITS):
+	if not WaterSystem.raising_water_is_safe(world, target, units):
 		return Validation.reject("přenos by zvedl hladinu nad bezpečnou mez")
-	return Validation.accept({"source": source, "target": target,
-			"units": PumpState.TRANSFER_UNITS})
+	return Validation.accept({"source": source, "target": target, "units": units})
 
 static func transfer(world: WorldState, pump_index: int, validation: Validation,
 		out_events: Array) -> void:
@@ -250,12 +258,12 @@ static func run_automatics(world: WorldState, out_events: Array) -> void:
 		move_platform(world, platform_index, validation, out_events)
 		platform.trigger_latched = true
 
-	# Automatické čerpadlo přečerpá jednu kostku vody v momentě, kdy jsou
+	# Automatické čerpadlo přečerpá celý obsah zdroje v momentě, kdy jsou
 	# poprvé splněné všechny podmínky přenosu (design dok. §2.2.1): všechny
-	# napojené skříně jsou opravené a pod napětím, ve zdroji je aspoň kostka
-	# vody, v cíli aspoň kostka volné kapacity a nikdo se přenosem neutopí.
-	# Přesně tyhle podmínky ověřuje pump_can_transfer — automatika tedy jen
-	# sleduje náběžnou hranu jejího výsledku.
+	# napojené skříně jsou opravené a pod napětím, ve zdroji je nějaká voda,
+	# v cíli aspoň tolik volné kapacity, kolik je ve zdroji vody, a nikdo se
+	# přenosem neutopí. Přesně tyhle podmínky ověřuje pump_can_transfer —
+	# automatika tedy jen sleduje náběžnou hranu jejího výsledku.
 	for pump_index in world.pumps.size():
 		var pump: PumpState = world.pumps[pump_index]
 		if pump.is_manual():

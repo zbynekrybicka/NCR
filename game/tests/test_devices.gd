@@ -138,9 +138,9 @@ func test_repairing_a_cabinet_powers_it_and_starts_the_automatic_pump() -> void:
 	var repaired := action_1(sim)
 	t.is_true(repaired.accepted, "Il skříň opraví")
 	t.is_true(sim.world.devices[0].is_on, "opravená skříň je rovnou pod napětím")
-	t.equal(sim.world.reservoirs[0].volume_units, 2,
-			"automatika hned přečerpá kostku ze zdroje")
-	t.equal(sim.world.reservoirs[1].volume_units, 2, "a doteče do cíle")
+	t.equal(sim.world.reservoirs[0].volume_units, 0,
+			"automatika hned přečerpá celý obsah zdroje")
+	t.equal(sim.world.reservoirs[1].volume_units, 4, "a doteče do cíle")
 
 func test_il_must_stand_in_the_access_direction() -> void:
 	var sim := LevelBuilder.new() \
@@ -170,17 +170,31 @@ func _pump_world(volume_a: int, volume_b: int, robot_in_b: bool = false) -> Worl
 	DeviceSystem.initialize(world)
 	return world
 
-func test_pump_transfers_one_cube() -> void:
+## Jedno sepnutí přečerpá CELÝ obsah zdroje, ne pevnou kostku (design dok.
+## §2.2.1).
+func test_pump_transfers_the_whole_source() -> void:
 	var world := _pump_world(4, 0)
 	t.equal(world.reservoirs.size(), 2, "dvě nádrže")
 	t.equal(world.reservoirs[0].cells.size(), 6, "nádrž A má šest buněk")
 	t.equal(world.reservoirs[1].cells.size(), 6, "nádrž B taky")
 	var validation := DeviceSystem.pump_can_transfer(world, 0, 0)
 	t.is_true(validation.ok, "přenos je možný: " + validation.reason)
+	t.equal(int(validation.data["units"]), 4, "dávka je celý obsah zdroje")
 	var events: Array = []
 	DeviceSystem.transfer(world, 0, validation, events)
-	t.equal(world.reservoirs[0].volume_units, 2, "ze zdroje ubyla kostka")
-	t.equal(world.reservoirs[1].volume_units, 2, "do cíle přibyla")
+	t.equal(world.reservoirs[0].volume_units, 0, "zdroj se vyprázdnil beze zbytku")
+	t.equal(world.reservoirs[1].volume_units, 4, "a celý obsah přitekl do cíle")
+
+## Zbytek pod celou kostkou se přečerpá taky — pravidlo mluví o 100 % obsahu,
+## ne o celých kostkách.
+func test_pump_transfers_a_partial_cube_too() -> void:
+	var world := _pump_world(1, 0)
+	var validation := DeviceSystem.pump_can_transfer(world, 0, 0)
+	t.is_true(validation.ok, "půl kostky je pořád obsah zdroje: " + validation.reason)
+	var events: Array = []
+	DeviceSystem.transfer(world, 0, validation, events)
+	t.equal(world.reservoirs[0].volume_units, 0, "zdroj je prázdný")
+	t.equal(world.reservoirs[1].volume_units, 1, "a půlkostka je v cíli")
 
 func test_pump_stops_completely_when_someone_would_drown() -> void:
 	var world := _pump_world(4, 2, true)
@@ -190,9 +204,31 @@ func test_pump_stops_completely_when_someone_would_drown() -> void:
 	t.equal(world.reservoirs[1].volume_units, 2, "cíl taky ne")
 
 func test_pump_needs_water_in_the_source() -> void:
-	var world := _pump_world(1, 0)
+	var world := _pump_world(0, 0)
 	t.is_false(DeviceSystem.pump_can_transfer(world, 0, 0).ok,
 			"z prázdné nádrže se nečerpá")
+
+## Nestačí-li volná kapacita cíle na celý obsah zdroje, nepřečerpá se nic —
+## ani ta část, která by se vešla (design dok. §2.2.1).
+func test_pump_needs_room_for_the_whole_source() -> void:
+	# Cíl má kapacitu 12 jednotek a 10 už je zabraných → volné jsou 2,
+	# zdroj má 4.
+	var world := _pump_world(4, 10)
+	t.equal(world.reservoirs[1].total_capacity(), 12, "kapacita cíle")
+	var validation := DeviceSystem.pump_can_transfer(world, 0, 0)
+	t.is_false(validation.ok, "částečný přenos neexistuje")
+	t.equal(world.reservoirs[0].volume_units, 4, "zdroj se nezměnil")
+	t.equal(world.reservoirs[1].volume_units, 10, "cíl taky ne")
+
+## Přesně padnoucí kapacita stačí — podmínka je „stejná nebo větší".
+func test_pump_accepts_an_exactly_fitting_target() -> void:
+	var world := _pump_world(4, 8)
+	var validation := DeviceSystem.pump_can_transfer(world, 0, 0)
+	t.is_true(validation.ok, "volné 4 jednotky na 4 jednotky zdroje stačí: "
+			+ validation.reason)
+	var events: Array = []
+	DeviceSystem.transfer(world, 0, validation, events)
+	t.equal(world.reservoirs[1].volume_units, 12, "cíl je po přenosu plný")
 
 func test_pump_must_not_drain_an_unlimited_reservoir() -> void:
 	var world := _pump_world(4, 0)
@@ -217,27 +253,27 @@ func test_pump_needs_all_of_its_cabinets() -> void:
 	t.is_true(DeviceSystem.pump_can_transfer(world, 0, 0).ok,
 			"po opravě čerpadlo zase jede")
 
-## Automatické čerpadlo (bez řídicí jednotky) přečerpá jednu kostku v momentě,
-## kdy jsou poprvé splněné podmínky přenosu, a pak čeká na další náběžnou
-## hranu (design dok. §2.2.1).
+## Automatické čerpadlo (bez řídicí jednotky) přečerpá celý obsah zdroje
+## v momentě, kdy jsou poprvé splněné podmínky přenosu, a pak čeká na další
+## náběžnou hranu (design dok. §2.2.1). Protože po přenosu zůstane zdroj
+## prázdný, podmínka sama přestane platit a čerpadlo čeká, až se zdroj naplní.
 func test_automatic_pump_fires_once_on_the_rising_edge() -> void:
 	var world := _pump_world(4, 0)
 	var events: Array = []
 	DeviceSystem.run_automatics(world, events)
-	t.equal(world.reservoirs[0].volume_units, 2, "první sepnutí přečerpalo kostku")
-	t.equal(world.reservoirs[1].volume_units, 2, "a přiteklo do cíle")
+	t.equal(world.reservoirs[0].volume_units, 0, "první sepnutí vyprázdnilo zdroj")
+	t.equal(world.reservoirs[1].volume_units, 4, "a celý obsah je v cíli")
 
 	events.clear()
 	DeviceSystem.run_automatics(world, events)
-	t.equal(world.reservoirs[0].volume_units, 2, "podruhé už samo nesepne")
+	t.equal(world.reservoirs[1].volume_units, 4, "podruhé už nemá co čerpat")
 	t.is_true(events.is_empty(), "a nevydá žádnou událost")
 
-	# Vypnutá skříň podmínku poruší; po zapnutí přijde nová náběžná hrana.
-	world.devices[0].is_on = false
+	# Nová voda ve zdroji je nová náběžná hrana.
+	world.reservoirs[0].volume_units = 2
 	DeviceSystem.run_automatics(world, events)
-	world.devices[0].is_on = true
-	DeviceSystem.run_automatics(world, events)
-	t.equal(world.reservoirs[0].volume_units, 0, "po obnovení podmínek sepne znovu")
+	t.equal(world.reservoirs[0].volume_units, 0, "doplněný zdroj čerpadlo sepne znovu")
+	t.equal(world.reservoirs[1].volume_units, 6, "a doteče do cíle")
 
 func test_automatic_pump_waits_until_the_target_has_room() -> void:
 	# Cíl je plný (kapacita 12 jednotek, viz test výše — 6 buněk po 2).

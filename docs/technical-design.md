@@ -1313,9 +1313,17 @@ var linked_control_unit: int      # -1 → automatické
 var trigger_latched: bool         # náběžná hrana automatiky
 ```
 
-Jedno sepnutí přenese `TRANSFER_UNITS = 2` jednotky (jednu kostku vody). Čerpadlo je pod napětím, jen když jsou **všechny** napojené skříně opravené a zapnuté (design dokument §2.2.1) — tutéž funkci `cabinets_powered` používá i plošina.
+Jedno sepnutí přenese **celý** obsah zdroje: `units = source.volume_units` (design dokument §2.2.1). Čerpadlo nemá pevnou velikost dávky, proto na `PumpState` žádná konstanta typu `TRANSFER_UNITS` není — dávka se počítá při každé validaci znovu. Podmínky v `pump_can_transfer`:
 
-**Automatické čerpadlo** (bez řídicí jednotky) sepne jednou na náběžné hraně splnění všech podmínek přenosu: napájení, aspoň kostka vody ve zdroji, aspoň kostka volné kapacity v cíli a bezpečná hladina. Přesně tyhle podmínky ověřuje `pump_can_transfer`, takže automatika jen sleduje náběžnou hranu jejího výsledku (`trigger_latched`) — žádná druhá, samostatně psaná sada podmínek neexistuje.
+1. `cabinets_powered` — **všechny** napojené skříně opravené a zapnuté (tutéž funkci používá i plošina);
+2. zdroj není `unlimited` (neměl by definovaný „celý obsah"; vynucuje i editor, V10);
+3. `units > 0` — ve zdroji je nějaká voda (i zbytek pod celou kostkou se čerpá);
+4. `target.total_capacity() - target.volume_units >= units` — volná kapacita cíle stačí na **celý** obsah zdroje; `unlimited` cíl projde vždy;
+5. `raising_water_is_safe(target, units)` — přenos nikoho neutopí ([§9.4](#94-kontrola-utonutí)).
+
+Přenos je **all-or-nothing**: nesplní-li se kterákoli podmínka, nepřečerpá se nic — ani část, která by se do cíle vešla. Stejný princip jako u kontroly utonutí; `Validation` proto nese hotové `units` a `transfer` už jen aplikuje.
+
+**Automatické čerpadlo** (bez řídicí jednotky) sepne jednou na náběžné hraně splnění právě těchto podmínek. Ověřuje je `pump_can_transfer`, takže automatika jen sleduje náběžnou hranu jejího výsledku (`trigger_latched`) — žádná druhá, samostatně psaná sada podmínek neexistuje. Protože sepnutí zdroj vyprázdní (`volume_units == 0`), podmínka 3 hned poté sama padne a zámek se uvolní; `trigger_latched` je tak u čerpadla už jen pojistka a zabránit opakovanému sepnutí v jednom dosazení nemusí.
 
 Přenos respektuje kontrolu utonutí ([§9.4](#94-kontrola-utonutí)). Nádrž s `unlimited` nikdy nemění hladinu, ať už se do ní čerpá, nebo se z ní čerpá. Editor nedovolí nastavit **čerpadlo** tak, aby čerpalo *z* nádrže s `unlimited` (do ní čerpat lze bez omezení) — to se vynucuje jako validační pravidlo editoru (V10, [§16.2](#162-validační-pravidla)). Toto omezení se týká jen čerpadel: **Dul** z `unlimited` nádrže čerpat smí (jeho akce 1 čerpadlem není), a stejně tak do ní smí vypustit cisternu — v obou případech se `volume_units` nádrže neaktualizuje.
 

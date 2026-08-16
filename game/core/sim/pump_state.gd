@@ -3,8 +3,8 @@ extends RefCounted
 
 ## Čerpadlo mezi dvěma nádržemi (§13.3).
 
-## Kolik jednotek přenese jedno sepnutí — jedna kostka vody.
-const TRANSFER_UNITS := GridTypes.UNITS_PER_CUBE
+## Jedno sepnutí přečerpá celý obsah zdrojové nádrže (design dok. §2.2.1),
+## takže čerpadlo nemá pevný objem dávky — počítá se z `volume_units` zdroje.
 
 var reservoir_a: int = 0
 var reservoir_b: int = 0
@@ -13,8 +13,10 @@ var default_direction: int = 0     # 0 = A→B, 1 = B→A
 var current_direction: int = 0     # u SWITCH se střídá
 var linked_cabinets: Array = []    # indexy do WorldState.devices
 var linked_control_unit: int = -1  # -1 → automatické
-## Automatické čerpadlo přečerpá jednou na náběžné hraně splnění všech
-## podmínek přenosu, ne každý příkaz — stejný důvod jako u plošiny (§13.2).
+## Automatické čerpadlo sepne na náběžné hraně splnění všech podmínek přenosu,
+## ne každý příkaz — stejný důvod jako u plošiny (§13.2). Od chvíle, kdy jedno
+## sepnutí přečerpá celý obsah zdroje, je zámek jen pojistka: po přenosu je
+## zdroj prázdný, takže podmínka stejně sama přestane platit.
 var trigger_latched: bool = false
 
 func is_manual() -> bool:
