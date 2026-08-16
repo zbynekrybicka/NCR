@@ -876,17 +876,31 @@ Rozhodovací logika je potřeba i mimo krok. Design dokument §2.1.2 ji zmiňuje
        Condition has_item(robot, FUEL)          → TRUE
        Condition standing_on_solid_or_ice        → TRUE   (pevný podklad,
                                                     nebo jiná kostka ledu)
-       Condition ahead_is_water                  → TRUE
-       Condition reservoir_fill_ratio(ahead) > 1/2  → TRUE
+       Condition water_cell_within_reach(ahead) != NO_CELL  → TRUE
+                                                    # mrazí se "ze břehu i
+                                                    # z mělké vody" (design
+                                                    # dok. §1.1.6): buňka
+                                                    # s vodou buď v rovině
+                                                    # robota, nebo o patro
+                                                    # níž — na břehu je buňka
+                                                    # v rovině nohou jen
+                                                    # vzduch nad nádrží (§9.1),
+                                                    # stejný dosah jako
+                                                    # u Dulovy hadice výše.
+                                                    # Přes pevný blok (i led)
+                                                    # se nedosáhne.
+       Condition reservoir_fill_ratio(target) > 1/2  → TRUE
                                                     # "hladina vyšší než do
                                                     # poloviny okrajové
                                                     # kostky", stejný vzorec
                                                     # jako u Dulova čerpání
                                                     # ze břehu (§7.6 výše)
-       Emit(FreezeTarget.AHEAD)
-       # apply(): FUEL se spotřebuje, ahead_cell -> ICE (kotvená k podkladu
+       Emit(FreezeTarget = ta buňka s vodou)
+       # apply(): FUEL se spotřebuje, cílová buňka -> ICE (kotvená k podkladu
        # pod ní, capacity_units = 0), volume_units -2 a kapacita -2 ve
        # stejné nádrži (§9.3, pozn. ¹), BlockPlaced + WaterVolumeChanged.
+       # Ze břehu tak vznikne led, jehož horní hrana je v rovině nohou —
+       # robot na něj rovnou vkročí (ledová cesta, design dok. §1.1.6).
        # Není co zmrazit (žádná voda splňující podmínku výše) → FAIL,
        # akce se neprovede a FUEL zůstává.
 

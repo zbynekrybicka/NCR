@@ -119,3 +119,57 @@ func test_yeo_needs_water_above_half() -> void:
 	_with_fuel(sim)
 	t.is_false(action_1(sim).accepted, "nízká hladina se nezmrazí")
 	t.equal(sim.world.robots[0].inventory.size(), 1, "palivo zůstává")
+
+# ── Zmrazování ze břehu (design dok. §1.1.6 „ze břehu i z mělké vody") ─────
+#
+# Stejná geometrie jako u Dulova čerpání ze břehu: nádrž je jáma v terénu
+# (patro 1), Yeo stojí na její hraně v patře 2. Patro 2 je otevřené k okraji
+# levelu, takže do nádrže nepatří (§9.1) — nádrž je jen dno o kapacitě 4.
+
+func _bank(volume: int) -> Simulation:
+	return LevelBuilder.new() \
+		.layer(0, "#####\n#####\n#####") \
+		.layer(1, "#####\n##..#\n#####") \
+		.layer(2, ".....\n.Y...\n.....") \
+		.reservoir(Vector3i(2, 1, 1), volume) \
+		.simulate()
+
+func test_yeo_freezes_from_the_bank_a_storey_below() -> void:
+	var sim := _bank(3) # 3 ze 4 jednotek, tedy víc než 50 %
+	_with_fuel(sim)
+	t.equal(sim.world.water_depth_at(Vector3i(2, 2, 1)), GridTypes.WaterDepth.DRY,
+			"v rovině Yeoa před ním voda není — hladina je o patro níž")
+
+	var result := action_1(sim)
+	t.is_true(result.accepted, "ze břehu Yeo zmrazí i hladinu o patro níž")
+	t.equal(sim.world.block_at(Vector3i(2, 1, 1)), GridTypes.BlockType.ICE,
+			"led vznikl v buňce s vodou, ne ve vzduchu nad ní")
+	t.equal(sim.world.reservoirs[0].volume_units, 1, "objem klesl o kostku")
+	t.equal(sim.world.reservoirs[0].total_capacity(), 2, "a kapacita o stejnou kostku")
+	t.is_true(sim.world.robots[0].inventory.is_empty(), "palivo se spotřebovalo")
+
+func test_yeo_walks_onto_the_ice_made_from_the_bank() -> void:
+	var sim := _bank(3)
+	_with_fuel(sim)
+	action_1(sim)
+	t.is_true(step(sim).accepted, "po vlastním ledu Yeo přejde z břehu dál")
+	t.equal(robot_cell(sim), Vector3i(2, 2, 1), "stojí nad zmrazenou buňkou")
+
+func test_yeo_from_the_bank_still_needs_more_than_half() -> void:
+	var sim := _bank(2) # přesně polovina kapacity
+	_with_fuel(sim)
+	t.is_false(action_1(sim).accepted, "poloprázdná nádrž se ze břehu nezmrazí")
+	t.equal(sim.world.reservoirs[0].volume_units, 2, "hladina zůstala beze změny")
+	t.equal(sim.world.robots[0].inventory.size(), 1, "palivo zůstává")
+
+func test_yeo_does_not_freeze_through_a_solid_block() -> void:
+	# Nádrž je zakrytá — před Yeoem je zeď a voda až pod ní.
+	var sim := LevelBuilder.new() \
+		.layer(0, "#####\n#####\n#####") \
+		.layer(1, "#####\n##..#\n#####") \
+		.layer(2, ".....\n.Y##.\n.....") \
+		.reservoir(Vector3i(2, 1, 1), 4) \
+		.simulate()
+	_with_fuel(sim)
+	t.is_false(action_1(sim).accepted, "skrz pevný blok chlad nedosáhne")
+	t.equal(sim.world.robots[0].inventory.size(), 1, "palivo zůstává")

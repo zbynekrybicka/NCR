@@ -14,14 +14,18 @@ func validate(world: WorldState, robot_index: int) -> Validation:
 	if not ActionHelpers.standing_on_solid_or_ice(world, robot_index):
 		return Validation.reject("Yeo nestojí na pevném podkladu ani na ledu")
 
+	# Mrazí se buď v rovině robota (stojí v mělké vodě), nebo o patro níž
+	# (stojí na břehu, hladina je pak v rovině jeho nohou) — stejný dosah
+	# jako u Dulova čerpání ze břehu.
 	var ahead := ActionHelpers.ahead_cell(world, robot_index)
-	var reservoir_index := world.reservoir_at(ahead)
-	if reservoir_index == -1 or world.water_depth_at(ahead) == GridTypes.WaterDepth.DRY:
-		return Validation.reject("před robotem není voda")
+	var target := ActionHelpers.water_cell_within_reach(world, ahead)
+	if target == ActionHelpers.NO_CELL:
+		return Validation.reject("v dosahu není voda")
+	var reservoir_index := world.reservoir_at(target)
 	var res: ReservoirState = world.reservoirs[reservoir_index]
 	if not WaterSystem.fill_ratio_over_half(res):
 		return Validation.reject("hladina není vyšší než do poloviny kostky")
-	return Validation.accept({"target": ahead, "reservoir": reservoir_index})
+	return Validation.accept({"target": target, "reservoir": reservoir_index})
 
 func apply(world: WorldState, robot_index: int, validation: Validation,
 		out_events: Array) -> void:

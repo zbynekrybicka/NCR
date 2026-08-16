@@ -4,6 +4,9 @@ extends RefCounted
 ## Sdílené validační predikáty akcí (§11). Jedna implementace, používá je víc
 ## akcí. Žádný z nich nemutuje stav.
 
+## Vrací se místo buňky, když žádná nevyhovuje — nikdy neleží uvnitř levelu.
+const NO_CELL := Vector3i(-1, -1, -1)
+
 static func behind_cell(world: WorldState, robot_index: int) -> Vector3i:
 	var robot: RobotState = world.robots[robot_index]
 	return robot.cell - GridTypes.dir_vector(robot.facing)
@@ -48,6 +51,21 @@ static func reservoir_within_reach(world: WorldState, cell: Vector3i) -> int:
 		if index != -1:
 			return index
 	return -1
+
+## Yeo a1 — buňka s vodou, na kterou Yeo dosáhne chladicí hlavicí ve směru
+## `cell`. Stejný dosah jako Dulova hadice výše: nejdřív rovina robota, pak
+## patro níž, protože ze břehu je buňka v rovině nohou jen vzduch nad nádrží
+## (§9.1). Ta se přeskočí, i když do nádrže patří — mrazí se první buňka,
+## ve které voda opravdu sahá. Přes pevný blok (včetně ledu) se nedosáhne.
+## Vrací `NO_CELL`, není-li v dosahu co zmrazit (design dok. §1.1.6).
+static func water_cell_within_reach(world: WorldState, cell: Vector3i) -> Vector3i:
+	var probes: Array[Vector3i] = [cell, cell + GridTypes.DOWN_VECTOR]
+	for probe in probes:
+		if not world.is_inside(probe) or world.is_solid_at(probe):
+			return NO_CELL
+		if world.water_depth_at(probe) != GridTypes.WaterDepth.DRY:
+			return probe
+	return NO_CELL
 
 static func has_item(world: WorldState, robot_index: int, item: int) -> bool:
 	var robot: RobotState = world.robots[robot_index]
