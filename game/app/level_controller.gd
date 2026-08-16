@@ -30,7 +30,6 @@ func setup_with_simulation(p_simulation: Simulation) -> void:
 	animator.finished.connect(_on_animation_finished)
 
 	camera_rig = CameraRig.new()
-	camera_rig.world = simulation.world
 	add_child(camera_rig)
 
 	hud = Hud.new()
@@ -59,7 +58,6 @@ func _send(command_type: int) -> void:
 	var result := simulation.submit_command(Command.new(command_type))
 	if result.has_event(Event.EventType.LEVEL_RESTARTED):
 		view.build(simulation.world)
-		camera_rig.world = simulation.world
 		_focus_active_robot(true)
 		hud.show_state(simulation, "Level restartován")
 		return

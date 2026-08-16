@@ -3,9 +3,8 @@ extends Node3D
 
 ## Propojuje EditorSession (data, §16) se scénou: EditorView (vykreslení),
 ## EditorCamera (pohled) a EditorUi (paleta/dialogy). Myš se promítá do
-## mřížky obyčejným krokováním paprsku po malých úsecích — stejný princip
-## jako CameraRig._clamp_to_grid, ne fyzikální raycast (level nemá kolizní
-## tvary, je to čistě datová mřížka).
+## mřížky obyčejným krokováním paprsku po malých úsecích, ne fyzikálním
+## raycastem (level nemá kolizní tvary, je to čistě datová mřížka).
 
 signal play_requested(simulation: Simulation)
 signal menu_requested

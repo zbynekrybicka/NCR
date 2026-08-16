@@ -2,15 +2,15 @@ class_name CameraRig
 extends Node3D
 
 ## Kamera (§17.3). Dva režimy: orbitální kolem aktivního robota a first
-## person z jeho pohledu. Kolize s mřížkou se řeší dotazem po buňkách,
-## ne fyzikou (P4) — kamera nikdy neprojde kostkou.
+## person z jeho pohledu. Vzdálenost od robota mění jen kolečko myši —
+## nikdy se neupravuje automaticky. Kamera překážkám neuhýbá: leží-li mezi
+## ní a robotem kostka, robot není vidět (§2.1.1).
 
 const MIN_DISTANCE := 2.0
 const MAX_DISTANCE := 18.0
 const MOUSE_SENSITIVITY := 0.005
 const FOLLOW_SPEED := 8.0
 
-var world: WorldState
 var camera: Camera3D
 var first_person: bool = false
 
@@ -54,24 +54,5 @@ func _process(delta: float) -> void:
 		cos(_pitch) * sin(_yaw),
 		-sin(_pitch),
 		cos(_pitch) * cos(_yaw))
-	var wanted := _target + direction * _distance
-	camera.global_position = _clamp_to_grid(_target, wanted)
+	camera.global_position = _target + direction * _distance
 	camera.look_at(_target, Vector3.UP)
-
-## Sférický dotaz po mřížce: najdi první buňku se `solid` blokem na úsečce
-## od cíle k požadované pozici a kameru posaď před ni (§17.3).
-func _clamp_to_grid(from: Vector3, to: Vector3) -> Vector3:
-	if world == null:
-		return to
-	var distance := from.distance_to(to)
-	if distance <= 0.001:
-		return to
-	var steps := int(ceil(distance * 4.0))
-	var previous := from
-	for i in range(1, steps + 1):
-		var point := from.lerp(to, float(i) / float(steps))
-		var cell := Vector3i(floori(point.x), floori(point.y), floori(point.z))
-		if world.is_inside(cell) and world.is_solid_at(cell):
-			return previous
-		previous = point
-	return to

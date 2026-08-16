@@ -123,7 +123,7 @@ Level se zahajuje načtením informací o levelu ze souboru (viz [Formát ulože
 
 Kamera se vždy dívá směrem k aktuálně aktivnímu robotovi — při výměně aktivního robota (viz [Ovládání robotů](#212-řízené-prvky--roboti)) se přepne i cílový bod kamery na nově aktivního robota.
 
-Hráč může kamerou kolem aktivního robota otáčet pomocí myši, a to jak vodorovně, tak svisle, a přibližovat/oddalovat ji kolečkem myši. Kamera se nesmí dostat do kolize s kostkami levelu — nikdy nesmí projít skrz žádnou kostku.
+Hráč může kamerou kolem aktivního robota otáčet pomocí myši, a to jak vodorovně, tak svisle, a přibližovat/oddalovat ji kolečkem myši. **Vzdálenost kamery od robota se mění výhradně kolečkem myši** — nikdy se neupravuje automaticky. Kamera tedy nijak neuhýbá překážkám: leží-li mezi ní a robotem kostka, robot prostě není vidět a hráč si pohled sám otočí nebo oddálí. Není podmínkou, aby byl robot vždy viditelný; podmínkou je, že kamera na něj vždy míří.
 
 Kameru lze dočasně přepnout do režimu **first person**, ve kterém hráč vidí scénu přímo z pohledu robota (přesně to, co má robot před sebou). Tento režim se hodí typicky v situacích, kdy robot vstupuje do uzavřených či jinak špatně přehledných prostor.
 
