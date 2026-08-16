@@ -100,7 +100,7 @@ Základní hmotnost je 2. Inspirovaný astrodroidem R2-D2, disponuje pájecím z
 
 **Akce 1 — Interakce se zařízením:** Sama o sobě neprovádí nic — její efekt závisí na tom, co je před Ilem:
 
-- Stojí-li Il před **rozbitou elektrickou skříní** a má u sebe **service kit**, skříň se opravou stane funkční a Il o kit přijde (spotřebuje se). Je-li skříň rozbitá a Il kit nemá, akce se neprovede.
+- Stojí-li Il před **rozbitou elektrickou skříní** a má u sebe **service kit**, skříň se opravou stane funkční a Il o kit přijde (spotřebuje se). Opravená skříň je **rovnou pod napětím** — stejně jako skříň, která poruchu vůbec neměla (ta je pod napětím od startu levelu). Hráč tedy nemusí po opravě skříň ještě zvlášť zapínat: napojené automatické čerpadlo nebo plošina se rozjede hned, jakmile jsou splněné jejich ostatní podmínky. Vypnout skříň lze až následně převzetím kontroly nad ní. Je-li skříň rozbitá a Il kit nemá, akce se neprovede.
 - Stojí-li Il před **funkčním ovládacím panelem** (elektrická skříň nebo řídicí jednotka), hráč přebírá kontrolu nad daným zařízením — hra se přepne na ovládání tohoto panelu. Il jako jediný může elektrická zařízení ovládat.
 
 **Akce 2 — Odložení service kitu / opuštění ovládání:** Il může sbírat service kity, které využívá k opravě rozbitých elektrických zařízení (viz Akce 1). Pokud Il právě neovládá žádné zařízení, Akce 2 odloží nesený service kit, většinou za účelem uvolnění místa v inventáři. Pokud Il právě ovládá zařízení (po Akci 1), Akce 2 se místo toho použije k opuštění tohoto ovládání a hráč se vrací zpět k řízení Ila.

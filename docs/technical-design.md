@@ -1255,7 +1255,7 @@ var is_on: bool
 Il musí stát v sousední buňce ve směru `access_direction` a být otočený k zařízení. `access_direction` je proto vždy vodorovný (validace V15, [§16.2](#162-validační-pravidla)).
 
 Akce 1 Ila:
-- zařízení `is_broken == true` a Il má `SERVICE_KIT` → oprava, kit se spotřebuje, `DeviceRepaired`;
+- zařízení `is_broken == true` a Il má `SERVICE_KIT` → oprava, kit se spotřebuje, `DeviceRepaired`; u skříně se přitom nastaví i `is_on = true` — opravená skříň je rovnou pod napětím, stejně jako skříň bez poruchy po `DeviceSystem.initialize` (design dokument §1.1.7). Samotné `is_broken = false` nestačí: `cabinets_powered` vyžaduje obojí, takže by napojené automatické čerpadlo/plošina po opravě zůstaly stát;
 - zařízení `is_broken == true` a Il nemá kit → odmítnuto;
 - zařízení funkční → převzetí kontroly, `DeviceControlTaken`, `robot.controlling_device = idx`.
 

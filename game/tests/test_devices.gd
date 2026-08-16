@@ -117,6 +117,31 @@ func test_broken_device_needs_a_service_kit() -> void:
 	t.is_true(sim.world.robots[0].inventory.is_empty(), "kit se spotřeboval")
 	t.is_true(repaired.has_event(Event.EventType.DEVICE_REPAIRED), "událost opravy")
 
+## Oprava skříň nejen zprovozní, ale rovnou ji uvede pod napětí — stejně jako
+## skříň bez poruchy po startu levelu. Jinak by napojené automatické čerpadlo
+## po opravě zůstalo stát (design dok. §1.1.7, §2.2.1).
+func test_repairing_a_cabinet_powers_it_and_starts_the_automatic_pump() -> void:
+	var sim := LevelBuilder.new() \
+		.layer(0, "##########\n##########\n##########") \
+		.layer(1, "##########\n#...#....#\n##########") \
+		.layer(2, "##########\n#...##...#\n#####L####") \
+		.reservoir(Vector3i(1, 1, 1), 4) \
+		.reservoir(Vector3i(5, 1, 1), 0) \
+		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(6, 2, 2),
+				GridTypes.Direction.WEST, GridTypes.ControlMode.BUTTON, true) \
+		.pump(0, 1, [0]) \
+		.simulate()
+	t.is_false(sim.world.devices[0].is_on, "rozbitá skříň není pod napětím")
+	t.equal(sim.world.reservoirs[0].volume_units, 4, "ve zdroji jsou dvě kostky")
+
+	sim.world.robots[0].inventory.append(GridTypes.ItemType.SERVICE_KIT)
+	var repaired := action_1(sim)
+	t.is_true(repaired.accepted, "Il skříň opraví")
+	t.is_true(sim.world.devices[0].is_on, "opravená skříň je rovnou pod napětím")
+	t.equal(sim.world.reservoirs[0].volume_units, 2,
+			"automatika hned přečerpá kostku ze zdroje")
+	t.equal(sim.world.reservoirs[1].volume_units, 2, "a doteče do cíle")
+
 func test_il_must_stand_in_the_access_direction() -> void:
 	var sim := LevelBuilder.new() \
 		.layer(0, "####") \

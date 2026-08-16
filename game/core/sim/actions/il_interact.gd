@@ -35,6 +35,11 @@ func apply(world: WorldState, robot_index: int, validation: Validation,
 	if validation.data["result"] == IlResult.REPAIR:
 		robot.remove_item(GridTypes.ItemType.SERVICE_KIT)
 		device.is_broken = false
+		# Opravená skříň je rovnou pod napětím — stejně jako skříň bez poruchy
+		# po startu levelu (DeviceSystem.initialize). Bez toho by zůstala
+		# vypnutá a napojené čerpadlo ani plošina by se po opravě nerozjely.
+		if device.kind == GridTypes.DeviceKind.POWER_CABINET:
+			device.is_on = true
 		out_events.append(Event.device_repaired(device_index))
 		return
 

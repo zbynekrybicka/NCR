@@ -388,10 +388,10 @@ func _build_pump_dialog() -> void:
 
 	_pump_dialog.add_child(fields)
 	_pump_dialog.confirmed.connect(func():
-		var source := _pump_source.get_selected_id()
-		var target := _pump_target.get_selected_id()
+		var source := _selected_index(_pump_source)
+		var target := _selected_index(_pump_target)
 		pump_create_requested.emit(source, target, _selected_indices(_pump_cabinets),
-				_pump_unit.get_selected_id(), _pump_bidirectional.button_pressed, 0))
+				_selected_index(_pump_unit), _pump_bidirectional.button_pressed, 0))
 	add_child(_pump_dialog)
 
 func _open_pump_dialog() -> void:
@@ -402,9 +402,15 @@ func _open_pump_dialog() -> void:
 		_pump_target.select(1)
 	_fill_list(_pump_cabinets, _mechanisms.get("cabinets", []))
 	_pump_unit.clear()
-	_pump_unit.add_item("žádná (automatické)", -1)
+	# „Žádná" je platná volba — čerpadlo bez řídicí jednotky je automatické
+	# (§13.3). Index se nese v metadatech, ne v id položky: OptionButton
+	# záporné id zahodí a nahradí ho indexem položky, takže by se z volby
+	# „žádná" stal odkaz na zařízení 0 a validace by hlásila falešnou chybu.
+	_pump_unit.add_item("žádná (automatické)")
+	_pump_unit.set_item_metadata(0, -1)
 	for entry in _mechanisms.get("control_units", []):
-		_pump_unit.add_item(String(entry[1]), int(entry[0]))
+		_pump_unit.add_item(String(entry[1]))
+		_pump_unit.set_item_metadata(_pump_unit.item_count - 1, int(entry[0]))
 	_pump_dialog.popup_centered()
 
 ## Přehled všech mechanismů s možností je smazat.
@@ -461,7 +467,14 @@ func _fill_list(list: ItemList, entries: Array) -> void:
 func _fill_options(options: OptionButton, entries: Array) -> void:
 	options.clear()
 	for entry in entries:
-		options.add_item(String(entry[1]), int(entry[0]))
+		options.add_item(String(entry[1]))
+		options.set_item_metadata(options.item_count - 1, int(entry[0]))
+
+## Index mechanismu za vybranou položkou; -1, když není z čeho vybírat.
+func _selected_index(options: OptionButton) -> int:
+	if options.selected < 0:
+		return -1
+	return int(options.get_item_metadata(options.selected))
 
 func _selected_indices(list: ItemList) -> Array:
 	var out: Array = []
