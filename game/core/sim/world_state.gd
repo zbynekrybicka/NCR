@@ -137,6 +137,14 @@ func set_orientation(cell: Vector3i, dir: int) -> void:
 func is_ramp_rising_toward(cell: Vector3i, dir: int) -> bool:
 	return block_at(cell) == GridTypes.BlockType.RAMP and orientation_at(cell) == dir
 
+## Buňka leží na šikmině — buď je to přímo buňka šikminy (tam robot dojede při
+## sestupu), nebo buňka nad ní (tam vyjde při výstupu; validátor sem taky nic
+## nepustí, viz V6). V obou případech je robot na ploše šikminy a nesmí tam
+## zůstat stát (design dok. §2.1.4 „nelze na ní setrvat").
+func is_on_ramp(cell: Vector3i) -> bool:
+	return block_at(cell) == GridTypes.BlockType.RAMP \
+			or block_at(cell + GridTypes.DOWN_VECTOR) == GridTypes.BlockType.RAMP
+
 # ── Roboti ─────────────────────────────────────────────────────────────────
 
 func robot_at(cell: Vector3i) -> int:

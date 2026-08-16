@@ -41,16 +41,56 @@ func test_ramp_up_and_down() -> void:
 		.simulate()
 	step(sim)
 	t.equal(robot_cell(sim), Vector3i(2, 1, 0), "krok k šikmině")
-	step(sim)
-	t.equal(robot_cell(sim), Vector3i(3, 2, 0), "výstup po šikmině (dílčí krok 1)")
-	step(sim)
-	t.equal(robot_cell(sim), Vector3i(4, 2, 0), "krok na plošinu nad zdí")
+
+	var up := step(sim)
+	t.is_true(up.accepted, "výstup po šikmině prošel")
+	t.equal(robot_cell(sim), Vector3i(4, 2, 0),
+			"na šikmině se nezůstává — výstup a sesednutí jsou jeden krok")
+	t.equal(up.events_of(Event.EventType.ROBOT_MOVED).size(), 2,
+			"dílčí kroky 1 a 0 v jednom příkazu hráče")
 
 	submit(sim, Command.CommandType.TURN_AROUND)
+	var down := step(sim)
+	t.is_true(down.accepted, "sestup po šikmině prošel")
+	t.equal(robot_cell(sim), Vector3i(2, 1, 0), "a taky skončil až na rovině za šikminou")
+	t.equal(down.events_of(Event.EventType.ROBOT_MOVED).size(), 2,
+			"dílčí kroky -1 a 0 v jednom příkazu hráče")
+
+func test_ramp_without_room_behind_it_is_rejected() -> void:
+	# Za šikminou je propast — na šikmině nelze zůstat, takže se krok neprovede.
+	var sim := LevelBuilder.new() \
+		.layer(0, "#####") \
+		.layer(1, ".H>..") \
+		.layer(2, ".....") \
+		.simulate()
+	var result := step(sim)
+	t.is_false(result.accepted, "výstup na šikminu bez pokračování se odmítne")
+	t.equal(robot_cell(sim), Vector3i(1, 1, 0), "robot na šikminu vůbec nevstoupil")
+
+func test_ramp_blocked_behind_its_top_is_rejected() -> void:
+	# Nad koncem šikminy stojí zeď — sesednout není kam.
+	var sim := LevelBuilder.new() \
+		.layer(0, "#####") \
+		.layer(1, ".H>##") \
+		.layer(2, "...#.") \
+		.simulate()
+	var result := step(sim)
+	t.is_false(result.accepted, "zeď za vrcholem šikminy krok zruší")
+	t.equal(robot_cell(sim), Vector3i(1, 1, 0), "robot zůstal na místě")
+
+func test_ramp_series_is_one_command() -> void:
+	var sim := LevelBuilder.new() \
+		.layer(0, "######") \
+		.layer(1, ".H.>##") \
+		.layer(2, "....>#") \
+		.layer(3, "......") \
+		.simulate()
 	step(sim)
-	t.equal(robot_cell(sim), Vector3i(3, 1, 0), "sestup po šikmině (dílčí krok -1)")
-	step(sim)
-	t.equal(robot_cell(sim), Vector3i(2, 1, 0), "a zpět na rovinu")
+	var result := step(sim)
+	t.is_true(result.accepted, "série šikmin prošla")
+	t.equal(robot_cell(sim), Vector3i(5, 3, 0), "robot vyjel obě šikminy jedním příkazem")
+	t.equal(result.events_of(Event.EventType.ROBOT_MOVED).size(), 3,
+			"dílčí kroky 1, 1 a 0")
 
 func test_ice_slide_is_one_command() -> void:
 	var sim := LevelBuilder.new() \

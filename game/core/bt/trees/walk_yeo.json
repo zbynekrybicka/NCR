@@ -6,27 +6,30 @@
     "children": [
       {
         "type": "sequence",
-        "comment": "šikmina nahoru",
+        "comment": "šikmina nahoru — RUNNING, protože na šikmině nelze setrvat (design dok. §2.1.4): za výstupem musí následovat aspoň jeden další dílčí krok, jinak celý krok FAILne. Režim `ramp` v podmínce dovoluje sérii šikmin za sebou.",
         "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_ramp_facing_me"},
           {"type": "condition", "predicate": "ahead_above_is_passable"},
-          {"type": "emit", "substep": 1}
+          {"type": "emit_continue", "substep": 1, "mode": "ramp"}
         ]
       },
       {
         "type": "sequence",
-        "comment": "šikmina dolů",
+        "comment": "šikmina dolů — RUNNING ze stejného důvodu jako šikmina nahoru",
         "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_ramp_facing_away"},
           {"type": "condition", "predicate": "ahead_below_free_for_robot"},
-          {"type": "emit", "substep": -1}
+          {"type": "emit_continue", "substep": -1, "mode": "ramp"}
         ]
       },
       {
         "type": "sequence",
-        "comment": "rovná chůze — ahead_below_is_solid zahrnuje led i normální zem stejně",
+        "comment": "rovná chůze — ahead_below_is_solid zahrnuje led i normální zem stejně; zároveň sesednutí ze šikminy na rovinu za ní",
         "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_solid"},
           {"type": "emit", "substep": 0}

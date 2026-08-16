@@ -99,7 +99,7 @@
         "type": "sequence",
         "comment": "led — klouže stejně jako ostatní (§10)",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_ice"},
           {"type": "emit_continue", "substep": 0, "mode": "slide"}
@@ -107,7 +107,7 @@
       },
       {
         "type": "sequence",
-        "comment": "konec skluzu o překážku",
+        "comment": "konec skluzu o překážku; režim `ramp` tu schválně není — na šikmině se zastavit nelze",
         "children": [
           {"type": "condition", "predicate": "mode_in", "arg": ["slide"]},
           {"type": "condition", "predicate": "ahead_is_passable", "expect": false},
@@ -116,30 +116,30 @@
       },
       {
         "type": "sequence",
-        "comment": "šikmina nahoru",
+        "comment": "šikmina nahoru — RUNNING, protože na šikmině nelze setrvat (design dok. §2.1.4): za výstupem musí následovat aspoň jeden další dílčí krok, jinak celý krok FAILne. Režim `ramp` v podmínce dovoluje sérii šikmin za sebou.",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_ramp_facing_me"},
           {"type": "condition", "predicate": "ahead_above_is_passable"},
-          {"type": "emit", "substep": 1}
+          {"type": "emit_continue", "substep": 1, "mode": "ramp"}
         ]
       },
       {
         "type": "sequence",
-        "comment": "šikmina dolů",
+        "comment": "šikmina dolů — RUNNING ze stejného důvodu jako šikmina nahoru",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_ramp_facing_away"},
           {"type": "condition", "predicate": "ahead_below_free_for_robot"},
-          {"type": "emit", "substep": -1}
+          {"type": "emit_continue", "substep": -1, "mode": "ramp"}
         ]
       },
       {
         "type": "sequence",
-        "comment": "rovná chůze",
+        "comment": "rovná chůze; zároveň sesednutí ze šikminy na rovinu za ní",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_solid"},
           {"type": "condition", "predicate": "ahead_below_is_ice", "expect": false},
@@ -148,7 +148,7 @@
       },
       {
         "type": "sequence",
-        "comment": "šplhání nahoru — jen s ≤ 2 předměty a jen po neledové zdi",
+        "comment": "šplhání nahoru — jen s ≤ 2 předměty a jen po neledové zdi. Šplhat se dá jen z roviny (režim \"\"), ne ze šikminy: design dok. o šplhání ze šikminy nic neříká, takže krok na šikminu, za kterou je jen stěna, zatím FAILne.",
         "children": [
           {"type": "condition", "predicate": "mode_in", "arg": [""]},
           {"type": "condition", "predicate": "ahead_is_solid"},
@@ -160,7 +160,7 @@
       },
       {
         "type": "sequence",
-        "comment": "sešplhání dolů — bez limitu předmětů; krok vpřed do prázdna",
+        "comment": "sešplhání dolů — bez limitu předmětů; krok vpřed do prázdna. Jen z roviny, ze stejného důvodu jako šplhání nahoru.",
         "children": [
           {"type": "condition", "predicate": "mode_in", "arg": [""]},
           {"type": "condition", "predicate": "ahead_is_passable"},

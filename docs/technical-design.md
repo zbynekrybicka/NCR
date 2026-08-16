@@ -437,7 +437,9 @@ Souborů je pět, ne sedm — sdílený základ chůze ([§7.6.0](#7600-sdílen�
 
 **Proč má Dul jeden strom, a ne dva.** Strom se vybírá jednou na začátku kroku. Dulův krok ale umí prostředí uprostřed změnit — sklouznout po ledu do vody, nebo vylézt z vody na led a klouzat dál (design dok. §1.1.2). Výběr podle „je právě ve vodě" by takový krok nikdy nedokončil: strom plavání o ledu neví a sdílený základ neumí plavat. Cenou je, že `dul.json` opakuje větve sdíleného základu; formát stromů nemá mechanismus vkládání a Dulův strom se od základu skutečně liší.
 
-**Režim smyčky (`mode`).** Strom se po každém `RUNNING` vyhodnocuje znovu od kořene z posunuté sondy, takže z pozice samotné nejde poznat, jestli jde o začátek kroku, nebo o pokračování skluzu/šplhání. Uzel `EmitAndContinue` proto nese pole `mode` (`slide`, `climb_up`, `climb_down`) a větve se gatují predikátem `mode_in`. Bez toho by Net po neúspěšném výlezu spadl do větve sešplhání místo `FAIL`.
+**Režim smyčky (`mode`).** Strom se po každém `RUNNING` vyhodnocuje znovu od kořene z posunuté sondy, takže z pozice samotné nejde poznat, jestli jde o začátek kroku, nebo o pokračování skluzu/šplhání. Uzel `EmitAndContinue` proto nese pole `mode` (`slide`, `ramp`, `climb_up`, `climb_down`) a větve se gatují predikátem `mode_in`. Bez toho by Net po neúspěšném výlezu spadl do větve sešplhání místo `FAIL`.
+
+Režim `ramp` znamená „sonda stojí na šikmině". Na šikmině nelze setrvat (design dok. §2.1.4), takže v tomto režimu nesmí žádná větev krok ukončit bez dalšího dílčího kroku — proto v něm chybí větev „konec skluzu o překážku" a proto obě větve šikmin vracejí `RUNNING`. Není-li kam pokračovat, propadne `Selector` až na `Fail` a celý krok se zahodí; robot na šikminu ani nevstoupí. Pojistkou proti větvím, které by robota na šikmině složily jinudy (rovná chůze na horní hranu, výlez Neta, vylezení Dula z vody), je kontrola v `StepEvaluator`: `SUCCESS`, po kterém by sonda stála na šikmině, se překlopí na odmítnutý krok. „Stát na šikmině" je přitom obojí — být v buňce šikminy (sestup) i v buňce nad ní (výstup, viz [V6](#162-validace-levelu)); výjimku mají Da (letí) a Dul ve vodě (plave), stejně jako v usazování ([§8](#8-gravitace-a-usazování)).
 
 ### 7.6 Stromy jednotlivých robotů
 
@@ -445,30 +447,43 @@ Následující bloky definují krok a rozhodovací logiku akcí pro každého ro
 
 #### 7.6.0 Sdílený základ chůze (Han, Set, Il, Dul po souši)
 
-Podmínky větví se vzájemně vylučují (viz predikát `ahead_below_is_ice` explicitně vyloučený z „rovná chůze" — bez toho by kolidoval s větví „led", protože `ICE` má `solid = ano`, viz [§5.1](#51-typy-bloků)), pořadí větví v `Selectoru` proto nehraje roli.
+Podmínky větví se vzájemně vylučují (viz predikát `ahead_below_is_ice` explicitně vyloučený z „rovná chůze" — bez toho by kolidoval s větví „led", protože `ICE` má `solid = ano`, viz [§5.1](#51-typy-bloků)), pořadí větví v `Selectoru` proto nehraje roli. Výjimkou je dvojice „šikmina dolů" / „rovná chůze", která se překrývá (viz [O2](#207-otevřené-otázky-z-implementace)) — tam rozhoduje pořadí.
 
 ```
 Selector "krok":
   Sequence "led":
+    Condition mode_in ["", "slide", "ramp"]
     Condition ahead_is_passable
     Condition ahead_below_is_ice        → TRUE
-    EmitAndContinue(0)   # RUNNING; opakuje se z posunuté pozice, dokud
-                          # ahead_below_is_ice; skončí Emit(0)+Succeed na
+    EmitAndContinue(0, mode=slide)   # RUNNING; opakuje se z posunuté pozice,
+                          # dokud ahead_below_is_ice; skončí Emit(0)+Succeed na
                           # pevné (neledové) zemi, Fail nad propastí (§7.3)
+  Sequence "konec skluzu o překážku":
+    Condition mode_in ["slide"]      # v režimu "ramp" schválně ne — na
+    Condition ahead_is_passable → FALSE   # šikmině se zastavit nedá
+    Succeed
   Sequence "šikmina nahoru":
+    Condition mode_in ["", "slide", "ramp"]
     Condition ahead_is_ramp_facing_me
-    Emit(1)
+    Condition ahead_above_is_passable
+    EmitAndContinue(1, mode=ramp)    # RUNNING: na šikmině nelze setrvat,
+                          # za výstupem musí následovat další dílčí krok
   Sequence "šikmina dolů":
+    Condition mode_in ["", "slide", "ramp"]
     Condition ahead_is_passable
     Condition ahead_below_is_ramp_facing_away
-    Emit(-1)
+    Condition ahead_below_free_for_robot
+    EmitAndContinue(-1, mode=ramp)   # RUNNING ze stejného důvodu
   Sequence "rovná chůze":
+    Condition mode_in ["", "slide", "ramp"]   # "ramp" = sesednutí ze šikminy
     Condition ahead_is_passable
     Condition ahead_below_is_solid      → TRUE
     Condition ahead_below_is_ice        → FALSE   (jinak kolize s „led")
     Emit(0)
   Fail
 ```
+
+Série šikmin za sebou je proto jeden příkaz hráče, stejně jako skluz po ledu: režim `ramp` propouští obě větve šikmin i větev led, takže se výstupy/sestupy řetězí a krok skončí až sesednutím na rovinu (nebo skluzem po ledu, u Dula vstupem do vody).
 
 `ahead_is_passable(robot)` — sdílený predikát: kostka před robotem (na výšce robota) není `solid`, **a** pokud na ní leží předmět, robot ho buď smí sebrat (je v seznamu povolených sběračů daného `ItemType`, [§12](#12-inventář-a-předměty)) a má v inventáři volné místo, nebo tam předmět není. Jinak je předmět překážka a `ahead_is_passable` vrací `FALSE`. Sbírání do inventáře samo je efekt aplikační fáze (`ItemPickedUp`), strom pouze rozhoduje o průchodnosti.
 
@@ -481,13 +496,18 @@ Yeo nemá samostatnou větev „led" s `RUNNING` smyčkou — led je pro něj je
 ```
 Selector "krok":
   Sequence "šikmina nahoru":
+    Condition mode_in ["", "ramp"]
     Condition ahead_is_ramp_facing_me
-    Emit(1)
+    Condition ahead_above_is_passable
+    EmitAndContinue(1, mode=ramp)
   Sequence "šikmina dolů":
+    Condition mode_in ["", "ramp"]
     Condition ahead_is_passable
     Condition ahead_below_is_ramp_facing_away
-    Emit(-1)
+    Condition ahead_below_free_for_robot
+    EmitAndContinue(-1, mode=ramp)
   Sequence "rovná chůze":
+    Condition mode_in ["", "ramp"]
     Condition ahead_is_passable
     Condition ahead_below_is_solid      → TRUE
     Emit(0)
@@ -515,7 +535,7 @@ Jediný rozdíl proti sdílenému základu: chybí větev „led" a „rovná ch
 
      Selector "krok":
        Sequence "plavání vpřed / doplavání do vody":
-         Condition mode_in ["", "slide"]
+         Condition mode_in ["", "slide", "ramp"]
          Condition ahead_is_passable   → TRUE   (u Dula prakticky vždy
                                            „bez předmětu a bez solid bloku" —
                                            Dul není sběratel žádného ItemType,
@@ -524,7 +544,9 @@ Jediný rozdíl proti sdílenému základu: chybí větev „led" a „rovná ch
          Condition ahead_is_water      → TRUE
          Emit(0)
        ... větve „led", „konec skluzu", „šikmina nahoru/dolů",
-           „rovná chůze" — beze změny ze sdíleného základu (§7.6.0).
+           „rovná chůze" — beze změny ze sdíleného základu (§7.6.0),
+           včetně režimu „ramp" (šikmina je pro Dula cesta do nádrže,
+           jejíž hladina je moc nízko na vstup ze břehu, design dok. §2.1.4).
            Větev „led" slouží zároveň jako výlez z vody na led v rovině
            hladiny, větev „rovná chůze" jako výlez na břeh v téže rovině.
        Sequence "výlez na ledový břeh o patro výš":
@@ -538,8 +560,8 @@ Jediný rozdíl proti sdílenému základu: chybí větev „led" a „rovná ch
          Condition here_water_is_deep
          Condition ahead_above_is_passable
          Emit(1)
-       Sequence "vstup do vody ze břehu / z konce ledu":
-         Condition mode_in ["", "slide"]
+       Sequence "vstup do vody ze břehu / z konce ledu / ze šikminy":
+         Condition mode_in ["", "slide", "ramp"]
          Condition ahead_is_passable
          Condition ahead_water_is_boardable
          Emit(0)                          # do vody dosedne usazením, §8
@@ -577,6 +599,8 @@ Jediný rozdíl proti sdílenému základu: chybí větev „led" a „rovná ch
      — Net po ledu klouže stejně jako ostatní, viz §10). Šplhání jsou dvě
      další větve, které se zkusí až po ramp/led/rovné chůzi, těsně před
      finálním Fail — tzn. spouští se jen tehdy, když normální krok nejde.
+     Obě jsou gatované `mode_in [""]`: šplhat jde jen z roviny, ne ze
+     šikminy ani uprostřed skluzu (viz O12 v §20.7).
 
      Šplhání NAHORU (spouští se, když je vpředu zeď, kam by normální krok
      nemohl vstoupit):
@@ -1605,7 +1629,7 @@ Díry, které vyplavaly až při přepisu pravidel do kódu ([§21](#21-jak-je-t
 | # | Otázka | Co dělá kód teď |
 |---|---|---|
 | O1 | **Hanovo vysypání do vody.** [§9.3](#93-změna-objemu) říká `+2` k objemu *a zároveň* ztrátu kapacity buňky; design dokument §1.1.1 mluví jen o ztrátě kapacity. Objem kostky se tak započítá dvakrát a hladina stoupne o dvě kostky místo jedné. | Podle §9.3 (`+2` i ztráta kapacity), protože technický design je zdroj pravdy pro implementaci. Podezření na chybu — potřebuje rozhodnout. |
-| O2 | **Geometrie šikminy.** Výstup (`Emit(1)`) končí v buňce *nad* šikminou, sestup (`Emit(-1)`) končí *v* buňce šikminy. Obě cesty fungují, ale nejsou symetrické: z buňky nad šikminou nejde krokem zpět dolů. Zároveň neplatí tvrzení §7.6.0 o vzájemné výlučnosti větví — „šikmina dolů" a „rovná chůze" se překrývají, rozhoduje pořadí v `Selectoru`. | Strom podle §7.6.0 doslova; invariant I3 dostal výjimku pro `RAMP` (robot smí stát v buňce šikminy). |
+| O2 | **Geometrie šikminy.** Výstup (`Emit(1)`) končí v buňce *nad* šikminou, sestup (`Emit(-1)`) končí *v* buňce šikminy — nesymetrické, a z buňky nad šikminou nešlo krokem zpět dolů. Zároveň neplatí tvrzení §7.6.0 o vzájemné výlučnosti větví — „šikmina dolů" a „rovná chůze" se překrývají, rozhoduje pořadí v `Selectoru`. | **Z větší části vyřešeno** — design dok. §2.1.4: na šikmině nelze setrvat, takže krok na ni nesmí být poslední. Obě větve šikmin vracejí `RUNNING` (režim `ramp`), krok pokračuje až na rovinu za šikminou a bez pokračování celý `FAIL`ne; kontrola v `StepEvaluator` to hlídá i pro ostatní větve. Asymetrie mezních buněk tím přestala být pozorovatelná — robot v žádné z nich nekončí. Zůstává překryv větví: pořadí v `Selectoru` je významné (šikmina dolů je před rovnou chůzí). Invariant I3 nechává výjimku pro `RAMP`, protože sonda buňkou šikminy prochází. |
 | O3 | **První krok sešplhání Neta.** Kontrola „stěna za sondou" po prvním kroku přes hranu nikdy neprojde — stěna je v tu chvíli teprve *šikmo* za sondou. | Přidán predikát `behind_below_is_solid` jako alternativa k `behind_is_solid`. |
 | O4 | ~~**Dulův vstup do vody a výlez z ní.**~~ Design dokument §1.1.2 to podmiňuje tím, že hladina je ve výšce podkladu, na kterém Dul stojí; §2.1.4 k tomu dává toleranci necelé půlkostky a §1.1.2 dořešilo i rozhraní s ledem. | Vyřešeno. Podmínka je v predikátech `ahead_water_is_boardable` a `here_water_is_deep`, viz [§7.6](#76-stromy-jednotlivých-robotů). Dul má proto jeden strom na souš i vodu — krok umí prostředí uprostřed změnit. |
 | O5 | **Konec skluzu o překážku.** Design dokument §2.1.4 říká, že robot klouže „než narazí na překážku"; §7.3 popisuje jen konec na jiném povrchu a `FAIL` nad propastí. | Přidána větev „konec skluzu o překážku": je-li vpředu neprůchodná buňka, nashromážděná fronta se provede a robot zastaví na ledu. |
@@ -1614,6 +1638,7 @@ Díry, které vyplavaly až při přepisu pravidel do kódu ([§21](#21-jak-je-t
 | O8 | **Napájení elektrické skříně.** `is_on` má stav, ale žádné pravidlo neříká, co ho mění. | Skříň bez poruchy startuje zapnutá; `DEVICE_INPUT` na přímo ovládanou skříň napájení přepíná. |
 | O11 | ~~**Zařízení na plošině.** Zařízení je zeď plus odkaz souřadnicí ([§13.1](#131-zařízení)); `move_platform` posouvá jen blok, takže by se zařízení „odtrhlo" od své zdi.~~ **Vyřešeno** — design dokument §2.2.1: zařízení v kostce plošiny je její pevnou součástí a jede s ní. | `move_platform` posouvá i `DeviceState.cell` ([§13.2](#132-transportní-plošiny)). |
 | O9 | **Okraj levelu vůči vodě.** [§4](#4-souřadný-systém-a-konvence-mřížky) říká, že okraj se chová jako plná zeď; [§9.1](#91-identifikace-nádrží) říká, že dutina dotýkající se okraje není nádrž. | Pro pohyb je okraj zeď, pro vodu díra — nádrž musí mít vlastní dno i stěny. |
+| O12 | **Šplhání Neta ze šikminy.** Krok na šikminu musí pokračovat dalším dílčím krokem ([O2](#207-otevřené-otázky-z-implementace)). Design dokument neříká, jestli tím pokračováním smí být Netovo vyšplhání po stěně za šikminou (resp. sešplhání do propasti za ní). | Zatím ne — obě šplhací větve jsou gatované `mode_in [""]`, takže Net na šikminu, za kterou je jen stěna nebo propast, nevstoupí. Konzervativní volba: nedomýšlet pravidlo, které v design dokumentu není. |
 | O10 | **`LevelValidator` v `core/`, ne v `editor/`.** Pravidla V1–V14 potřebuje i čtečka levelu ([§15](#15-formát-uložení-levelu)), a `core/` nesmí záviset na `editor/` ([§3](#3-vrstvy-a-mapa-modulů)). | Validátor leží v `core/grid/level_validator.gd`, editor ho jen volá. |
 
 ### 20.5 Kde se plán nejspíš zadrhne

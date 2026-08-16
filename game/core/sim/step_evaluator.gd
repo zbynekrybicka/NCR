@@ -22,6 +22,8 @@ static func evaluate(world: WorldState, robot_index: int) -> Array:
 		var status := BTRuntime.tick(tree, ctx)
 		match status:
 			GridTypes.BTStatus.SUCCESS:
+				if _rests_on_ramp(world, robot, ctx.probe.cell):
+					return []
 				return ctx.queue
 			GridTypes.BTStatus.FAIL:
 				return []
@@ -34,3 +36,19 @@ static func evaluate(world: WorldState, robot_index: int) -> Array:
 	# Ochrana proti zacyklení (§7.3).
 	assert(false, "Krok překročil MAX_STEP_ITERATIONS — chyba ve stromě")
 	return []
+
+## Na šikmině nelze setrvat (design dok. §2.1.4), takže krok na ni nikdy nesmí
+## být poslední — za ním musí následovat aspoň jeden další dílčí krok. Větve
+## šikmin ve stromech proto vracejí RUNNING (režim `ramp`); tahle kontrola je
+## pojistka pro všechny ostatní větve, které by robota na šikmině složily
+## (rovná chůze na horní hranu, výlez Neta, vylezení Dula z vody).
+##
+## Da nad šikminou letí a Dul v zatopené šikmině plave — ti se jí nedotýkají,
+## stejná výjimka jako v usazování (§8).
+static func _rests_on_ramp(world: WorldState, robot: RobotState, cell: Vector3i) -> bool:
+	if robot.kind == GridTypes.RobotKind.DA:
+		return false
+	if robot.kind == GridTypes.RobotKind.DUL \
+			and world.water_depth_at(cell) != GridTypes.WaterDepth.DRY:
+		return false
+	return world.is_on_ramp(cell)

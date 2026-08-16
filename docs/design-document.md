@@ -206,6 +206,8 @@ Průchod stromem vrací jeden ze tří stavů:
 
 **Šikmina** — Speciální druh zdi s nízkou a vysokou stranou (bokorys pravoúhlého trojúhelníku, objem jedné kostky). Může být natočená čtyřmi směry a představuje cestu mezi vertikálními úrovněmi. Ze stran je nepřůchodná, nelze na ni nic odložit ani na ni vysypat korbu, nelze na ní setrvat.
 
+Z toho, že na šikmině nelze setrvat, plyne pravidlo pro krok: **dílčí krok na šikminu nikdy nesmí být poslední.** Hra proto ještě před provedením kroku ověří, že za šikminou je místo, na které robot může vstoupit podle ostatních pravidel (rovina, další šikmina v sérii, led, u Dula voda) — a teprve pak celý krok provede jako jeden příkaz hráče. Není-li kam pokračovat (propast, zeď, obsazená buňka), krok se **neprovede vůbec** a robot na šikminu ani nevstoupí — stejná logika jako u skluzu po ledu. "Být na šikmině" přitom znamená obojí: být v buňce šikminy (tam robot dojede při sestupu) i být v buňce nad ní (tam vyjde při výstupu).
+
 **Hlína** — Kostka tvořící neprůchodnou překážku pro všechny kromě Hana, který ji může vykopat akcí 1 (viz výše). Kostky nad ní, které mohou spadnout, se posunou o úroveň níž.
 
 **Kámen** — Nezničitelná překážka. Na rozdíl od zdi reaguje na gravitaci — pokud se prostor pod ní uvolní, posune se o úroveň níž. Stojí-li na zdi nebo na nejnižší úrovni levelu, chová se identicky se zdí.

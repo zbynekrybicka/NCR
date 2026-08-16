@@ -6,9 +6,9 @@
     "children": [
       {
         "type": "sequence",
-        "comment": "plavání vpřed, a zároveň doplavání/dosklouznutí do vody, která sahá nad rovinu, po které se Dul pohybuje — cíl je taky voda",
+        "comment": "plavání vpřed, a zároveň doplavání/dosklouznutí/sjetí po šikmině do vody, která sahá nad rovinu, po které se Dul pohybuje — cíl je taky voda",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_is_water"},
           {"type": "emit", "substep": 0}
@@ -18,7 +18,7 @@
         "type": "sequence",
         "comment": "led — RUNNING smyčka. Slouží i jako vstup na led z vody: vylezení na led v rovině hladiny je totéž jako vylezení na břeh, jen se pokračuje skluzem (design dok. §1.1.2).",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_ice"},
           {"type": "emit_continue", "substep": 0, "mode": "slide"}
@@ -26,7 +26,7 @@
       },
       {
         "type": "sequence",
-        "comment": "konec skluzu o překážku — nashromážděná fronta se provede (design dok. §2.1.4)",
+        "comment": "konec skluzu o překážku — nashromážděná fronta se provede (design dok. §2.1.4). Režim `ramp` tu schválně není: na šikmině se zastavit nelze.",
         "children": [
           {"type": "condition", "predicate": "mode_in", "arg": ["slide"]},
           {"type": "condition", "predicate": "ahead_is_passable", "expect": false},
@@ -35,30 +35,30 @@
       },
       {
         "type": "sequence",
-        "comment": "šikmina nahoru",
+        "comment": "šikmina nahoru — RUNNING, protože na šikmině nelze setrvat (design dok. §2.1.4): za výstupem musí následovat aspoň jeden další dílčí krok, jinak celý krok FAILne. Režim `ramp` v podmínce dovoluje sérii šikmin za sebou.",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_ramp_facing_me"},
           {"type": "condition", "predicate": "ahead_above_is_passable"},
-          {"type": "emit", "substep": 1}
+          {"type": "emit_continue", "substep": 1, "mode": "ramp"}
         ]
       },
       {
         "type": "sequence",
-        "comment": "šikmina dolů",
+        "comment": "šikmina dolů — RUNNING ze stejného důvodu jako šikmina nahoru; tudy se Dul dostává do nádrže, jejíž hladina je moc nízko na vstup ze břehu (design dok. §2.1.4)",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_ramp_facing_away"},
           {"type": "condition", "predicate": "ahead_below_free_for_robot"},
-          {"type": "emit", "substep": -1}
+          {"type": "emit_continue", "substep": -1, "mode": "ramp"}
         ]
       },
       {
         "type": "sequence",
-        "comment": "rovná chůze; zároveň vylezení z vody na břeh ve stejné rovině a konec skluzu na pevné zemi. Vylučovací podmínka na led, jinak kolize s větví led.",
+        "comment": "rovná chůze; zároveň vylezení z vody na břeh ve stejné rovině, konec skluzu na pevné zemi a sesednutí ze šikminy na rovinu za ní. Vylučovací podmínka na led, jinak kolize s větví led.",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_below_is_solid"},
           {"type": "condition", "predicate": "ahead_below_is_ice", "expect": false},
@@ -88,9 +88,9 @@
       },
       {
         "type": "sequence",
-        "comment": "vstup do vody ze břehu i z konce ledové cesty — hladina smí být pod rovinou, po které se Dul pohybuje, ale méně než o půl kostky (design dok. §1.1.2 + §2.1.4). Do vody pak Dul dosedne usazením (§8).",
+        "comment": "vstup do vody ze břehu, z konce ledové cesty i ze šikminy — hladina smí být pod rovinou, po které se Dul pohybuje, ale méně než o půl kostky (design dok. §1.1.2 + §2.1.4). Do vody pak Dul dosedne usazením (§8).",
         "children": [
-          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide"]},
+          {"type": "condition", "predicate": "mode_in", "arg": ["", "slide", "ramp"]},
           {"type": "condition", "predicate": "ahead_is_passable"},
           {"type": "condition", "predicate": "ahead_water_is_boardable"},
           {"type": "emit", "substep": 0}
