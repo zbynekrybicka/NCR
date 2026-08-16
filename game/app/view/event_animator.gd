@@ -95,6 +95,11 @@ func _start(event: Event) -> bool:
 		Event.EventType.BLOCK_FELL, Event.EventType.PLATFORM_MOVED, \
 		Event.EventType.ICE_MELTED:
 			view.refresh_blocks()
+			# Změna geometrie mění kapacitu vrstev, a tím i hladinu (§9.2).
+			view.refresh_water()
+			return false
+		Event.EventType.WATER_VOLUME_CHANGED, Event.EventType.PUMP_TRANSFERRED:
+			view.refresh_water()
 			return false
 		Event.EventType.ITEM_PICKED_UP, Event.EventType.ITEM_DROPPED, \
 		Event.EventType.KEY_PICKED_UP:

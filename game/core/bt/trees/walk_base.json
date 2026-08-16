@@ -1,6 +1,6 @@
 {
   "name": "walk_base",
-  "comment": "Sdílený základ chůze (technický design §7.6.0). Používají Han, Set, Il a Dul po souši.",
+  "comment": "Sdílený základ chůze (technický design §7.6.0). Používají Han, Set a Il. Dul má vlastní strom `dul.json` — po souši chodí stejně, ale navíc vstupuje do vody a vylézá z ní, a to i uprostřed skluzu po ledu.",
   "root": {
     "type": "selector",
     "children": [

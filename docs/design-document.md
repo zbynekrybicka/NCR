@@ -42,13 +42,13 @@ Základní hmotnost je 2. Může odstraňovat kostky hlíny, přičemž když je
 
 #### 1.1.2 Vodní — Dul
 
-Základní hmotnost je 2. Vypadá jako cisterna s čerpadlem, disponuje i lodním šroubem. Po suchu se může pohybovat jako ostatní, tedy rovně a po šikminách, nemůže skákat. Může se pohybovat po vodě. Do vody může vstoupit pouze v případě, že povrch, na kterém stojí, je ve stejné výšce jako vodní hladina zatopené oblasti. Ve stejné situaci jako jediný může z vody vylézt. Ve vodě se může pohybovat vodorovně i svisle. Ponořit se může vždy až na dno, není limitován maximálním ponorem.
+Základní hmotnost je 2. Vypadá jako cisterna s čerpadlem, disponuje i lodním šroubem. Po suchu se může pohybovat jako ostatní, tedy rovně a po šikminách, nemůže skákat. Může se pohybovat po vodě. Do vody může vstoupit pouze v případě, že povrch, na kterém stojí, je ve stejné výšce jako vodní hladina zatopené oblasti — s tolerancí podle [2.1.4 Voda](#214-statické-prvky--překážky): hladina smí být pod tímto povrchem, ale méně než o půl kostky. Ve stejné situaci jako jediný může z vody vylézt. Totéž platí i na rozhraní s ledem: klouže-li Dul po ledové cestě, která končí u vody, krok se provede, pokud hladina sahá do roviny ledu — tedy za stejné podmínky, jako by vstupoval z normálního břehu. Vystupuje-li naopak z vody na led, sklouže se až na konec ledové cesty, a to jak do vody, tak na pevný povrch. Ve vodě se může pohybovat vodorovně i svisle. Ponořit se může vždy až na dno, není limitován maximálním ponorem.
 
 **Akce 1 — Načerpání vody:** Lze provést, má-li Dul prázdnou cisternu, a to ve dvou situacích: ze břehu (bez ponoření), pokud je zatopená oblast před ním zaplněná na více než 50 % kapacity; nebo ponořený přímo ve vodě, mělké i hluboké, kde žádné takové omezení není. Při načerpání klesne hladina zatopené oblasti adekvátně objemu — má-li zatopená oblast hladinu o rozloze pěti kostek, hladina klesne o jednu pětinu výšky kostky.
 
 **Akce 2 — Vypuštění cisterny:** Cisterna se vypouští směrem dozadu. Vodu lze vypustit pouze do zatopených oblastí či oblastí určených pro zatopení, a to jak ze břehu, tak přímo do nádrže. Hladina zatopené oblasti stoupne adekvátně objemu jedné kostky. Pokud by zvýšení hladiny přesáhlo 50 % objemu dna nádrže, ve které stojí jiný robot (utonutí, viz [Voda](#214-statické-prvky--překážky)), vypuštění se neprovede.
 
-> ⚠️ *Nedokončeno:* krok Dula (po souši i ve vodě) se bude vyhodnocovat vlastním rozhodovacím stromem, viz [Mechanismus vyhodnocení kroku (behavior tree)](#212-řízené-prvky--roboti). Konkrétní strom pro Dula zatím není dodaný (podmínky pro jeho Akce 1 a 2 výše už ale jsou).
+> ℹ️ Krok Dula (po souši i ve vodě) se vyhodnocuje jedním vlastním rozhodovacím stromem, viz [Mechanismus vyhodnocení kroku (behavior tree)](#212-řízené-prvky--roboti). Jeden strom na obojí proto, že krok umí prostředí uprostřed změnit — sklouznout po ledu do vody nebo vylézt z vody na led a klouzat dál.
 
 #### 1.1.3 Ohnivý — Set
 
@@ -276,7 +276,7 @@ Od verze 0.1.0 je editor součástí hry. Levely do oficiální hry nejsou dodá
 
 Seznam částí, které dokument v aktuální podobě neřeší a je třeba je doplnit průběžně s vývojem:
 
-- [ ] Doplnit konkrétní rozhodovací strom (behavior tree) pro krok robota Dula po souši/vodě (mechanismus vyhodnocení je definovaný v [2.1.2](#212-řízené-prvky--roboti), samotné stromy jednotlivých robotů dodá autor postupně). *(Podmínky pro jeho Akce 1/2 jsou už doplněné v [1.1.2 Dul](#112-vodní--dul) — tohle se týká jen kroku samotného.)*
+- [x] ~~Doplnit konkrétní rozhodovací strom (behavior tree) pro krok robota Dula po souši/vodě~~ — pravidla kroku jsou doplněná v [1.1.2 Dul](#112-vodní--dul) (vstup do vody a výlez z ní včetně tolerance a rozhraní s ledem) a strom podle nich existuje.
 - [ ] Doplnit konkrétní rozhodovací stromy jednotlivých robotů pro krok obecně (viz [2.1.2](#212-řízené-prvky--roboti)) — dodá autor postupně.
 - [ ] Zahájení levelu — případné intro/cutscény (základní postup načtení a kamera už jsou popsané v [2.1.1](#211-zahájení-levelu)).
 - [ ] Scéna výběru/přepínání aktivního robota — logika (sekvence, klávesa Tab, klik v UI, podmínka bezpečí) je popsaná v [2.1.2](#212-řízené-prvky--roboti); vizuální stránka (podoba UI panelu s roboty) řešena až v 0.2.0.

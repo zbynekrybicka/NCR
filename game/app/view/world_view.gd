@@ -27,11 +27,17 @@ const ROBOT_COLORS := {
 	GridTypes.RobotKind.IL: Color(0.90, 0.75, 0.25),
 }
 
+## Voda se kreslí stejně jako v editoru (§17.1) — průhledná kostka na každé
+## zatopené buňce, sytější v hluboké vodě.
+const WATER_COLOR_SHALLOW := Color(0.35, 0.7, 1.0, 0.25)
+const WATER_COLOR_DEEP := Color(0.2, 0.45, 0.95, 0.35)
+
 var world: WorldState
 var _block_layers: Dictionary = {}   # BlockType -> MultiMeshInstance3D
 var _robot_nodes: Array = []         # index robota -> Node3D
 var _item_nodes: Dictionary = {}     # Vector3i -> Node3D
 var _key_node: Node3D
+var _water_root: Node3D
 
 static func cell_to_position(cell: Vector3i) -> Vector3:
 	return Vector3(cell) * CELL_SIZE + Vector3.ONE * (CELL_SIZE * 0.5)
@@ -43,6 +49,7 @@ func build(p_world: WorldState) -> void:
 	_block_layers.clear()
 	_robot_nodes.clear()
 	_item_nodes.clear()
+	_water_root = null
 
 	for block_type in BLOCK_COLORS.keys():
 		var multi_mesh := MultiMesh.new()
@@ -57,6 +64,7 @@ func build(p_world: WorldState) -> void:
 	refresh_blocks()
 	_build_robots()
 	refresh_items()
+	refresh_water()
 	_add_light()
 
 func _box_mesh(color: Color, half_height: bool) -> Mesh:
@@ -93,6 +101,38 @@ func refresh_blocks() -> void:
 				offset = Vector3(0, -CELL_SIZE * 0.25, 0)
 			instance.multimesh.set_instance_transform(i,
 					Transform3D(Basis.IDENTITY, cell_to_position(cells[i]) + offset))
+
+## Hladina je odvozená veličina (§9.2), ne uložený stav — překreslí se proto
+## celá po každé události, která mění objem nebo kapacitu nádrže (voda
+## načerpaná/vypuštěná, vykopaná díra v mělčině, roztátý led).
+func refresh_water() -> void:
+	if _water_root != null and is_instance_valid(_water_root):
+		_water_root.queue_free()
+	_water_root = null
+	if world.reservoirs.is_empty():
+		return
+	_water_root = Node3D.new()
+	add_child(_water_root)
+	for res in world.reservoirs:
+		for cell in res.cells:
+			var depth := world.water_depth_at(cell)
+			if depth == GridTypes.WaterDepth.DRY:
+				continue
+			_add_water_box(cell, WATER_COLOR_DEEP if depth == GridTypes.WaterDepth.DEEP \
+					else WATER_COLOR_SHALLOW)
+
+func _add_water_box(cell: Vector3i, color: Color) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3.ONE * (CELL_SIZE * 0.98)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.surface_set_material(0, material)
+	var node := MeshInstance3D.new()
+	node.mesh = mesh
+	node.position = cell_to_position(cell)
+	_water_root.add_child(node)
 
 func _build_robots() -> void:
 	for i in world.robots.size():

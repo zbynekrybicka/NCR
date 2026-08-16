@@ -11,13 +11,18 @@ func _basin(volume: int, unlimited: bool = false) -> Simulation:
 		.reservoir(Vector3i(1, 1, 1), volume, unlimited) \
 		.simulate()
 
-func test_swim_tree_is_used_in_water() -> void:
+func test_dul_has_one_tree_for_land_and_water() -> void:
+	# Jeden strom na obojí: krok umí prostředí uprostřed změnit (skluz po ledu
+	# do vody, výlez z vody na led), takže výběr podle výchozího stavu nestačí.
 	var sim := _basin(3)
-	t.equal(BTLibrary.tree_name_for(sim.world, 0), BTLibrary.TREE_DUL_SWIM,
-			"ve vodě se vybere strom plavání")
+	t.equal(BTLibrary.tree_name_for(sim.world, 0), BTLibrary.TREE_DUL,
+			"ve vodě rozhoduje Dulův strom")
 	var dry := LevelBuilder.new().layer(0, "###").layer(1, ".U.").simulate()
-	t.equal(BTLibrary.tree_name_for(dry.world, 0), BTLibrary.TREE_WALK_BASE,
-			"na suchu chodí sdíleným základem")
+	t.equal(BTLibrary.tree_name_for(dry.world, 0), BTLibrary.TREE_DUL,
+			"a na suchu taky")
+	var han := LevelBuilder.new().layer(0, "###").layer(1, ".H.").simulate()
+	t.equal(BTLibrary.tree_name_for(han.world, 0), BTLibrary.TREE_WALK_BASE,
+			"ostatním zůstal sdílený základ chůze")
 
 func test_swim_forward() -> void:
 	var sim := _basin(3)
@@ -43,6 +48,132 @@ func test_pump_from_shore_needs_more_than_half() -> void:
 	t.equal(sim.world.water_depth_at(Vector3i(1, 2, 1)), GridTypes.WaterDepth.DRY,
 			"Dul stojí na suchu")
 	t.is_false(action_1(sim).accepted, "z nádrže zaplněné na polovinu se ze břehu nečerpá")
+
+# ── Vstup do vody ze břehu (design dok. §1.1.2 + §2.1.4) ───────────────────
+#
+# Nádrž o dvou patrech: dno má kapacitu 4 jednotky (buňky 2 a 3 v patře 1),
+# horní patro 6 (buňky 1–3 v patře 2). Dul stojí na břehu v (1,2,1), tedy na
+# rovině y = 2, a dívá se na východ do nádrže.
+
+func _shore(volume: int, robot: String = "U") -> Simulation:
+	return LevelBuilder.new() \
+		.layer(0, "#####\n#####\n#####") \
+		.layer(1, "#####\n##..#\n#####") \
+		.layer(2, "#####\n#%s..#\n#####" % robot) \
+		.reservoir(Vector3i(2, 1, 1), volume) \
+		.simulate()
+
+func test_board_water_when_level_with_the_shore() -> void:
+	var sim := _shore(4) # dno plné, hladina přesně v rovině břehu
+	t.equal(sim.world.water_depth_at(Vector3i(1, 2, 1)), GridTypes.WaterDepth.DRY,
+			"Dul stojí na suchu")
+	t.is_true(step(sim).accepted, "do hladiny v rovině břehu Dul vstoupí")
+	t.equal(robot_cell(sim), Vector3i(2, 1, 1), "a usadí se ve vodě pod břehem")
+
+func test_board_water_within_half_a_cube() -> void:
+	var sim := _shore(3) # hladině chybí 1/4 kostky — méně než polovina
+	t.is_true(step(sim).accepted, "hladina níž o méně než půl kostky vstup dovolí")
+	t.equal(robot_cell(sim), Vector3i(2, 1, 1), "Dul skončí ve vodě")
+
+func test_board_water_rejected_when_level_too_low() -> void:
+	var sim := _shore(2) # hladině chybí přesně půl kostky — už ne „méně než"
+	t.is_false(step(sim).accepted, "na hladinu o půl kostky níž se ze břehu nevstupuje")
+	t.equal(robot_cell(sim), Vector3i(1, 2, 1), "Dul zůstal na břehu")
+
+func test_only_dul_boards_water_from_the_shore() -> void:
+	var sim := _shore(4, "H")
+	t.is_false(step(sim).accepted, "Han ze břehu do nádrže nevstoupí")
+	t.equal(robot_cell(sim), Vector3i(1, 2, 1), "zůstal stát")
+
+# ── Vylezení z vody na břeh (design dok. §1.1.2) ───────────────────────────
+#
+# Zrcadlo předchozí sady: Dul plave v (2,1,1), na západ od něj je zeď břehu
+# (1,1,1) a nad ní volná buňka (1,2,1). Vyleze o patro výš, tedy dílčím
+# krokem +1.
+
+func _in_basin_facing_shore(volume: int) -> Simulation:
+	return LevelBuilder.new() \
+		.layer(0, "#####\n#####\n#####") \
+		.layer(1, "#####\n##U.#\n#####") \
+		.layer(2, "#####\n#...#\n#####") \
+		.facing(GridTypes.RobotKind.DUL, GridTypes.Direction.WEST) \
+		.reservoir(Vector3i(2, 1, 1), volume) \
+		.simulate()
+
+func test_climb_out_onto_the_shore() -> void:
+	var sim := _in_basin_facing_shore(3) # hladině chybí 1/4 kostky k hraně břehu
+	t.equal(sim.world.water_depth_at(Vector3i(2, 1, 1)), GridTypes.WaterDepth.DEEP,
+			"voda mu sahá výš než do poloviny kostky")
+	t.is_true(step(sim).accepted, "přes zeď před sebou vyleze na břeh")
+	t.equal(robot_cell(sim), Vector3i(1, 2, 1), "stojí na hraně břehu")
+
+func test_climb_out_rejected_when_level_too_low() -> void:
+	var sim := _in_basin_facing_shore(2) # hladina přesně půl kostky pod hranou
+	t.equal(sim.world.water_depth_at(Vector3i(2, 1, 1)), GridTypes.WaterDepth.SHALLOW,
+			"voda sahá přesně do poloviny kostky")
+	t.is_false(step(sim).accepted, "z takové hladiny se na břeh nevyleze")
+	t.equal(robot_cell(sim), Vector3i(2, 1, 1), "Dul zůstal ve vodě")
+
+func test_climb_out_needs_free_cell_above_the_shore() -> void:
+	# Břeh přerostlý zdí — nahoře není kam vylézt.
+	var sim := LevelBuilder.new() \
+		.layer(0, "#####\n#####\n#####") \
+		.layer(1, "#####\n##U.#\n#####") \
+		.layer(2, "#####\n##..#\n#####") \
+		.facing(GridTypes.RobotKind.DUL, GridTypes.Direction.WEST) \
+		.reservoir(Vector3i(2, 1, 1), 3) \
+		.simulate()
+	t.is_false(step(sim).accepted, "do zdi nad břehem Dul nevyleze")
+	t.equal(robot_cell(sim), Vector3i(2, 1, 1), "zůstal ve vodě")
+
+# ── Led na rozhraní s vodou (design dok. §1.1.2) ───────────────────────────
+
+## Ledová cesta v patře 1 (buňky 1 a 2) končí u vody (buňky 3 a 4). Led má
+## nulovou kapacitu, patro 1 tedy pojme 4 jednotky. Dul stojí na ledu v (1,2,1).
+func _ice_path_to_water(volume: int) -> Simulation:
+	return LevelBuilder.new() \
+		.layer(0, "######\n######\n######") \
+		.layer(1, "######\n#II..#\n######") \
+		.layer(2, "######\n#U...#\n######") \
+		.reservoir(Vector3i(3, 1, 1), volume) \
+		.simulate()
+
+func test_slide_on_ice_ends_in_the_water() -> void:
+	var sim := _ice_path_to_water(4) # hladina přesně v rovině ledu
+	t.equal(sim.world.water_depth_at(Vector3i(1, 2, 1)), GridTypes.WaterDepth.DRY,
+			"Dul stojí na ledu, ne ve vodě")
+	t.is_true(step(sim).accepted, "skluz končící ve vodě se provede")
+	t.equal(robot_cell(sim), Vector3i(3, 1, 1), "dosklouzal a usadil se ve vodě")
+
+func test_slide_on_ice_into_too_low_water_is_rejected() -> void:
+	var sim := _ice_path_to_water(2) # hladina půl kostky pod rovinou ledu
+	t.is_false(step(sim).accepted, "na hladinu půl kostky níž se nesklouzne")
+	t.equal(robot_cell(sim), Vector3i(1, 2, 1), "Dul zůstal stát")
+
+func test_climb_out_onto_ice_slides_to_the_end() -> void:
+	# Dul plave v (1,1,1), vedle je ledová kra s horní hranou v rovině hladiny.
+	# Vyleze na ni o patro výš a klouže až tam, kde led končí — do vody.
+	var sim := LevelBuilder.new() \
+		.layer(0, "######\n######\n######") \
+		.layer(1, "######\n#UII.#\n######") \
+		.layer(2, "######\n#....#\n######") \
+		.reservoir(Vector3i(1, 1, 1), 4) \
+		.simulate()
+	t.equal(sim.world.water_depth_at(Vector3i(1, 1, 1)), GridTypes.WaterDepth.DEEP,
+			"Dul plave, hladina je v rovině horní hrany ledu")
+	t.is_true(step(sim).accepted, "vyleze na led a sklouže se")
+	t.equal(robot_cell(sim), Vector3i(4, 1, 1), "na konci ledu spadl zpátky do vody")
+
+func test_climb_out_onto_ice_ends_on_solid_ground() -> void:
+	# Totéž, ale ledová cesta končí na zdi — Dul na ní zůstane stát.
+	var sim := LevelBuilder.new() \
+		.layer(0, "######\n######\n######") \
+		.layer(1, "######\n#UII##\n######") \
+		.layer(2, "######\n#....#\n######") \
+		.reservoir(Vector3i(1, 1, 1), 2) \
+		.simulate()
+	t.is_true(step(sim).accepted, "skluz končící na pevné zemi se provede")
+	t.equal(robot_cell(sim), Vector3i(4, 2, 1), "Dul stojí na zdi za ledem")
 
 func test_release_raises_the_level() -> void:
 	var sim := _basin(2)

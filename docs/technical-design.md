@@ -417,7 +417,7 @@ Kontrakt uzlu `RUNNING`: uzel, který vrací `RUNNING`, **musí** přidat alespo
 | `EmitAndContinue(substep)` | totéž, ale vrátí `RUNNING` (opakuje vyhodnocení z nové pozice) |
 | `Succeed` / `Fail` | terminály |
 
-Predikáty pro `Condition` jsou pojmenované a registrované v jedné tabulce (`bt_nodes.gd`), aby je bylo možné referencovat ze souboru stromu jménem: `ahead_is_solid`, `ahead_is_ice`, `ahead_has_item`, `below_is_solid`, `behind_is_solid`, `behind_is_ice`, `ahead_is_ramp_facing_me`, `ahead_below_is_ramp_facing_away`, `ahead_below_is_ice`, `ahead_below_is_solid`, `ahead_is_passable`, `landing_is_safe`, `ahead_water_is_deep`, `carrying_at_most(n)`, …
+Predikáty pro `Condition` jsou pojmenované a registrované v jedné tabulce (`bt_nodes.gd`), aby je bylo možné referencovat ze souboru stromu jménem: `ahead_is_solid`, `ahead_is_ice`, `ahead_has_item`, `below_is_solid`, `behind_is_solid`, `behind_is_ice`, `ahead_is_ramp_facing_me`, `ahead_below_is_ramp_facing_away`, `ahead_below_is_ice`, `ahead_below_is_solid`, `ahead_is_passable`, `landing_is_safe`, `ahead_water_is_deep`, `ahead_water_is_boardable`, `here_is_water`, `here_water_is_deep`, `carrying_at_most(n)`, …
 
 ### 7.5 Formát uložení stromů
 
@@ -425,15 +425,17 @@ Stromy se ukládají jako **JSON** v `core/bt/trees/`. Soubor nese jeden strom j
 
 > **Změna proti původnímu návrhu (`.tres`).** Ruční psaní `.tres` s vnořenými resources je křehké a mimo Godot inspektor se špatně kontroluje; JSON nese tatáž data, dá se validovat samostatným testem ([§18](#18-testovací-strategie)) a čte se v diffu stejně dobře. Požadavek P7 (pravidla jsou data, ne kód) zůstává splněný.
 
-Souborů je pět, ne sedm — sdílený základ chůze ([§7.6.0](#7600-sdílený-základ-chůze-han-set-il-dul-po-souši)) je jeden soubor, ne čtyři kopie:
+Souborů je pět, ne sedm — sdílený základ chůze ([§7.6.0](#7600-sdílený-základ-chůze-han-set-il-dul-po-souši)) je jeden soubor, ne tři kopie:
 
 | Soubor | Kdo ho používá |
 |---|---|
-| `walk_base.json` | Han, Set, Il, Dul po souši |
+| `walk_base.json` | Han, Set, Il |
 | `walk_yeo.json` | Yeo |
 | `net.json` | Net (základ chůze + šplhání) |
 | `da.json` | Da (vodorovný let) |
-| `dul_swim.json` | Dul ve vodě |
+| `dul.json` | Dul (souš i voda v jednom stromě) |
+
+**Proč má Dul jeden strom, a ne dva.** Strom se vybírá jednou na začátku kroku. Dulův krok ale umí prostředí uprostřed změnit — sklouznout po ledu do vody, nebo vylézt z vody na led a klouzat dál (design dok. §1.1.2). Výběr podle „je právě ve vodě" by takový krok nikdy nedokončil: strom plavání o ledu neví a sdílený základ neumí plavat. Cenou je, že `dul.json` opakuje větve sdíleného základu; formát stromů nemá mechanismus vkládání a Dulův strom se od základu skutečně liší.
 
 **Režim smyčky (`mode`).** Strom se po každém `RUNNING` vyhodnocuje znovu od kořene z posunuté sondy, takže z pozice samotné nejde poznat, jestli jde o začátek kroku, nebo o pokračování skluzu/šplhání. Uzel `EmitAndContinue` proto nese pole `mode` (`slide`, `climb_up`, `climb_down`) a větve se gatují predikátem `mode_in`. Bez toho by Net po neúspěšném výlezu spadl do větve sešplhání místo `FAIL`.
 
@@ -470,7 +472,7 @@ Selector "krok":
 
 `ahead_is_passable(robot)` — sdílený predikát: kostka před robotem (na výšce robota) není `solid`, **a** pokud na ní leží předmět, robot ho buď smí sebrat (je v seznamu povolených sběračů daného `ItemType`, [§12](#12-inventář-a-předměty)) a má v inventáři volné místo, nebo tam předmět není. Jinak je předmět překážka a `ahead_is_passable` vrací `FALSE`. Sbírání do inventáře samo je efekt aplikační fáze (`ItemPickedUp`), strom pouze rozhoduje o průchodnosti.
 
-Tento strom používají beze změny **Han**, **Set**, **Il** a **Dul** (pohyb po souši) — žádný z nich nemá pohybové rozšíření nad rámec kroku vpřed / šikminy / klouzání po ledu; jejich robot-specifické rozdíly jsou jen v akcích ([§11](#11-akce)), ne v kroku. **Yeo** používá variantu níže.
+Tento strom používají beze změny **Han**, **Set** a **Il** — žádný z nich nemá pohybové rozšíření nad rámec kroku vpřed / šikminy / klouzání po ledu; jejich robot-specifické rozdíly jsou jen v akcích ([§11](#11-akce)), ne v kroku. **Yeo** používá variantu níže, **Dul** vlastní strom (tytéž větve plus voda).
 
 #### 7.6.0b Varianta pro YEO (chůze po ledu bez klouzání)
 
@@ -503,24 +505,60 @@ Jediný rozdíl proti sdílenému základu: chybí větev „led" a „rovná ch
 <!-- ════════════════════════════════════════════════════════════════════
      BEHAVIOR TREE — KROK: DUL (po souši i ve vodě)
      ════════════════════════════════════════════════════════════════════
-     Po souši: sdílený základ chůze, viz §7.6.0. Beze změny.
-     Svisle ve vodě (nahoru/dolů): STEP_UP/STEP_DOWN, mimo BT, viz §7.7.
+     Jeden strom na souš i vodu (`dul.json`), protože krok umí prostředí
+     uprostřed změnit — viz §7.5. Svisle ve vodě (nahoru/dolů) zůstává
+     mimo BT: STEP_UP/STEP_DOWN, viz §7.7. Dul plave volně, bez nutnosti
+     pevného podkladu pod sebou (I5 výjimka, §5.3) a bez limitu ponoru (§10).
 
-     Vodorovně ve vodě (plavání) — vlastní, triviální strom (žádná fronta,
-     žádný RUNNING; nahrazuje sdílený základ, dokud je Dul ve vodě —
-     BTLibrary vybírá strom podle kind i podle toho, zda je robot právě
-     ve vodě, ne jen podle kind). Dul plave volně, bez nutnosti pevného
-     podkladu pod sebou (I5 výjimka, §5.3) a bez limitu ponoru (§10):
+     Prvních šest větví je sdílený základ chůze (§7.6.0) plus „plavání
+     vpřed" na začátku; zbytek je voda:
 
-     Selector "krok (plavání)":
-       Sequence "plavání vpřed":
+     Selector "krok":
+       Sequence "plavání vpřed / doplavání do vody":
+         Condition mode_in ["", "slide"]
          Condition ahead_is_passable   → TRUE   (u Dula prakticky vždy
                                            „bez předmětu a bez solid bloku" —
                                            Dul není sběratel žádného ItemType,
                                            §12, takže predikát se chová stejně
                                            jako holý ahead_is_solid == FALSE)
+         Condition ahead_is_water      → TRUE
          Emit(0)
+       ... větve „led", „konec skluzu", „šikmina nahoru/dolů",
+           „rovná chůze" — beze změny ze sdíleného základu (§7.6.0).
+           Větev „led" slouží zároveň jako výlez z vody na led v rovině
+           hladiny, větev „rovná chůze" jako výlez na břeh v téže rovině.
+       Sequence "výlez na ledový břeh o patro výš":
+         Condition ahead_is_solid
+         Condition ahead_is_ice
+         Condition here_water_is_deep
+         Condition ahead_above_is_passable
+         EmitAndContinue(1, mode=slide)   # dál se klouže až na konec ledu
+       Sequence "výlez na břeh o patro výš":
+         Condition ahead_is_solid
+         Condition here_water_is_deep
+         Condition ahead_above_is_passable
+         Emit(1)
+       Sequence "vstup do vody ze břehu / z konce ledu":
+         Condition mode_in ["", "slide"]
+         Condition ahead_is_passable
+         Condition ahead_water_is_boardable
+         Emit(0)                          # do vody dosedne usazením, §8
        Fail
+
+     Podmínka hladiny (design dok. §1.1.2 + tolerance §2.1.4: hladina smí
+     být pod rovinou podkladu, ale méně než o půl kostky) je ve dvou
+     predikátech:
+
+       ahead_water_is_boardable — hladina nádrže před robotem sahá do
+         roviny, po které se robot pohybuje (`probe.cell.y`), případně
+         méně než půl kostky pod ni. Celočíselně: hladina leží ve vrstvě
+         `y_top` se zbytkem `remaining`; stačí `y_top >= floor_y`, nebo
+         `y_top == floor_y - 1 && 2 * remaining > capacity_of_layer(y_top)`.
+       here_water_is_deep — pro výlez o patro výš je „hladina v rovině
+         horní hrany té zdi" totéž jako „voda v mé buňce je hlubší než půl
+         kostky": horní hrana leží přesně o kostku výš než dno mé buňky.
+         Je-li cílová buňka nad zdí ještě pod hladinou, není to výlez, ale
+         plavání šikmo vzhůru — což je taky správně.
 
 
      ════════════════════════════════════════════════════════════════════ -->
@@ -1092,7 +1130,7 @@ Přepis design dokumentu §1.1 do implementovatelné tabulky. **Sloupec „hmotn
 
 **Zvláštní schopnosti mimo krok:**
 
-- **Dul** — jediný smí do `DEEP`; do vody vstoupí a z vody vyleze jen tam, kde je hladina ve výšce jeho podkladu; ve vodě se pohybuje i svisle, bez limitu ponoru.
+- **Dul** — jediný smí do `DEEP`; do vody vstoupí a z vody vyleze jen tam, kde je hladina ve výšce jeho podkladu (smí být níž, ale méně než o půl kostky — design dok. §1.1.2 a §2.1.4); ve vodě se pohybuje i svisle, bez limitu ponoru.
 - **Net** — šplhá po svislých stěnách; nahoru jen s ≤ 2 předměty a jen když stěna neobsahuje `ICE` a končí pevným podkladem (ne stropem); dolů bez limitu předmětů, ale pod stěnou musí být pevný podklad (ne vzduch, ne voda).
 - **Da** — létá volně vodorovně i svisle; nesmí zůstat ve vzduchu při přepnutí; předmět sbírá jen shora.
 - **Yeo** — po ledu chodí jako po souši, což je jediná výjimka z klouzání.
@@ -1569,7 +1607,7 @@ Díry, které vyplavaly až při přepisu pravidel do kódu ([§21](#21-jak-je-t
 | O1 | **Hanovo vysypání do vody.** [§9.3](#93-změna-objemu) říká `+2` k objemu *a zároveň* ztrátu kapacity buňky; design dokument §1.1.1 mluví jen o ztrátě kapacity. Objem kostky se tak započítá dvakrát a hladina stoupne o dvě kostky místo jedné. | Podle §9.3 (`+2` i ztráta kapacity), protože technický design je zdroj pravdy pro implementaci. Podezření na chybu — potřebuje rozhodnout. |
 | O2 | **Geometrie šikminy.** Výstup (`Emit(1)`) končí v buňce *nad* šikminou, sestup (`Emit(-1)`) končí *v* buňce šikminy. Obě cesty fungují, ale nejsou symetrické: z buňky nad šikminou nejde krokem zpět dolů. Zároveň neplatí tvrzení §7.6.0 o vzájemné výlučnosti větví — „šikmina dolů" a „rovná chůze" se překrývají, rozhoduje pořadí v `Selectoru`. | Strom podle §7.6.0 doslova; invariant I3 dostal výjimku pro `RAMP` (robot smí stát v buňce šikminy). |
 | O3 | **První krok sešplhání Neta.** Kontrola „stěna za sondou" po prvním kroku přes hranu nikdy neprojde — stěna je v tu chvíli teprve *šikmo* za sondou. | Přidán predikát `behind_below_is_solid` jako alternativa k `behind_is_solid`. |
-| O4 | **Dulův vstup do vody a výlez z ní.** Design dokument §1.1.2 to podmiňuje tím, že hladina je ve výšce podkladu, na kterém Dul stojí. Pravidlo není nikde přepsané do podmínek stromu. | Neimplementováno (raději díra než domyšlené pravidlo). Strom plavání má navíc větev „vylezení na břeh" s podmínkou pevného podkladu, jinak by Dul vyplaval do vzduchu a porušil I5. |
+| O4 | ~~**Dulův vstup do vody a výlez z ní.**~~ Design dokument §1.1.2 to podmiňuje tím, že hladina je ve výšce podkladu, na kterém Dul stojí; §2.1.4 k tomu dává toleranci necelé půlkostky a §1.1.2 dořešilo i rozhraní s ledem. | Vyřešeno. Podmínka je v predikátech `ahead_water_is_boardable` a `here_water_is_deep`, viz [§7.6](#76-stromy-jednotlivých-robotů). Dul má proto jeden strom na souš i vodu — krok umí prostředí uprostřed změnit. |
 | O5 | **Konec skluzu o překážku.** Design dokument §2.1.4 říká, že robot klouže „než narazí na překážku"; §7.3 popisuje jen konec na jiném povrchu a `FAIL` nad propastí. | Přidána větev „konec skluzu o překážku": je-li vpředu neprůchodná buňka, nashromážděná fronta se provede a robot zastaví na ledu. |
 | O6 | **Splynutí nádrží za běhu.** Han může vykopat příčku mezi dvěma nádržemi. Formát i čerpadla odkazují na nádrž indexem. | Voda se slije do nádrže s nižším indexem, druhá zůstane prázdná. Chování není v žádném dokumentu. |
 | O7 | ~~**Spouštění automatiky.** „Jakmile je limit splněn" nedefinuje, jestli se plošina hýbe opakovaně každý tah.~~ **Vyřešeno** — design dokument §2.2.1: náběžná hrana u plošiny i čerpadla; u čerpadla je podmínkou celý přenos (napájení, voda ve zdroji, místo v cíli, bezpečná hladina). | Náběžná hrana (`trigger_latched`) u plošin i čerpadel. |
@@ -1584,7 +1622,7 @@ Podrobnost dokumentu kopíruje rozložení rizika; totéž platí pro pozornost 
 
 **M8 — voda.** Jediné místo se zlomky. Skutečné riziko není aritmetika (ta je v [§9.4](#94-kontrola-utonutí) hotová), ale to, že `layer_capacity` se **mění za běhu** — led vznikne a zmizí, Han vykope díru v mělčině. Každá změna kapacity musí vrstvy přepočítat. Pojistka je v návrhu: hladina není nikdy uložený stav ([§9.2](#92-reprezentace-hladiny)), takže chyba se projeví okamžitě v testu, ne postupným rozjížděním dvou čísel.
 
-**M9 a M12 — stromy s `RUNNING`.** Dul (plavání) i Net (šplhání) vybírají strom podle stavu robota, ne jen podle druhu, a oba drží `RUNNING` napříč mnoha tiky. Riziko je nekonečná smyčka nebo fronta, která se provede jen zčásti. Pojistky jsou v [§7.3](#73-interpret-stromu): kontrakt uzlu `RUNNING` (musí přidat dílčí krok i posunout sondu) a `MAX_STEP_ITERATIONS`.
+**M9 a M12 — stromy s `RUNNING`.** Dul (skluz po ledu do vody a z vody na led) i Net (šplhání) drží `RUNNING` napříč mnoha tiky, a Dulův krok navíc uprostřed mění prostředí. Strom se proto u obou vybírá jen podle druhu robota — výběr podle stavu by takový krok nedokončil. Riziko je nekonečná smyčka nebo fronta, která se provede jen zčásti. Pojistky jsou v [§7.3](#73-interpret-stromu): kontrakt uzlu `RUNNING` (musí přidat dílčí krok i posunout sondu) a `MAX_STEP_ITERATIONS`.
 
 **M14 — plošiny.** ~~Jediné místo, kde se najednou pohybuje víc buněk **i s roboty na nich**, a jediné, kde se potkává pohyb s gravitací a vodou.~~ Pravidlo doplněno do design dokumentu ([§2.2.1](../docs/design-document.md#221-ovládací-panel)): dráha plošiny musí být z principu vždy prázdná (kontrola v editoru, blok v dráze tedy za běhu nemůže nastat) a hrozí-li přejezdem utonutí robota jiného než Dula, plošina se zablokuje bez ohledu na splnění ostatních podmínek spuštění. Zbývá to promítnout do implementace M14, ale interakce už není nedořešená.
 

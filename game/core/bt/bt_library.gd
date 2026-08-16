@@ -9,7 +9,7 @@ extends RefCounted
 ## P7 (pravidla jsou data, ne kód) tím zůstává splněný.
 ##
 ## Sdílený základ chůze (§7.6.0) je jeden soubor `walk_base.json`, ne sedm
-## kopií — Han, Set, Il i Dul po souši ho používají beze změny.
+## kopií — Han, Set i Il ho používají beze změny.
 
 const TREE_DIR := "res://core/bt/trees/"
 
@@ -17,9 +17,9 @@ const TREE_WALK_BASE := "walk_base"
 const TREE_WALK_YEO := "walk_yeo"
 const TREE_NET := "net"
 const TREE_DA := "da"
-const TREE_DUL_SWIM := "dul_swim"
+const TREE_DUL := "dul"
 
-const ALL_TREES := [TREE_WALK_BASE, TREE_WALK_YEO, TREE_NET, TREE_DA, TREE_DUL_SWIM]
+const ALL_TREES := [TREE_WALK_BASE, TREE_WALK_YEO, TREE_NET, TREE_DA, TREE_DUL]
 
 static var _cache: Dictionary = {}
 
@@ -44,15 +44,18 @@ static func load_tree(tree_name: String) -> Dictionary:
 static func clear_cache() -> void:
 	_cache.clear()
 
-## Výběr stromu podle druhu robota i podle jeho stavu — Dul plave vlastním
-## stromem, dokud je ve vodě (§7.6, komentář u Dula).
+## Výběr stromu podle druhu robota.
+##
+## Dul má jeden strom na souš i vodu. Dřív se mu vybíral zvlášť strom plavání
+## podle toho, jestli právě stojí ve vodě — jenže strom se vybírá jednou na
+## začátku kroku a Dulův krok umí prostředí uprostřed změnit (sklouznout po
+## ledu do vody, vylézt z vody na led a klouzat dál). Takový krok by strom
+## vybraný podle výchozího stavu nikdy nedokončil.
 static func tree_name_for(world: WorldState, robot_index: int) -> String:
 	var robot: RobotState = world.robots[robot_index]
 	match robot.kind:
 		GridTypes.RobotKind.DUL:
-			if world.water_depth_at(robot.cell) != GridTypes.WaterDepth.DRY:
-				return TREE_DUL_SWIM
-			return TREE_WALK_BASE
+			return TREE_DUL
 		GridTypes.RobotKind.DA:
 			return TREE_DA
 		GridTypes.RobotKind.NET:

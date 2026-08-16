@@ -25,12 +25,14 @@ const PREDICATES := [
 	"ahead_is_ramp_facing_me",
 	"ahead_below_is_ramp_facing_away",
 	"ahead_water_is_deep",
+	"ahead_water_is_boardable",
 	"below_is_solid",
 	"behind_is_solid",
 	"behind_is_ice",
 	"behind_below_is_solid",
 	"behind_below_is_ice",
 	"here_is_water",
+	"here_water_is_deep",
 	"carrying_at_most",
 	"mode_in",
 ]
@@ -78,6 +80,8 @@ static func evaluate(name: String, ctx: BTContext, arg: Variant = null) -> bool:
 					GridTypes.turn_around(probe.facing))
 		"ahead_water_is_deep":
 			return probe.world.water_depth_at(probe.cell_ahead()) == GridTypes.WaterDepth.DEEP
+		"ahead_water_is_boardable":
+			return water_ahead_is_boardable(probe)
 		"below_is_solid":
 			return GridTypes.is_solid(probe.below())
 		"behind_is_solid":
@@ -94,6 +98,11 @@ static func evaluate(name: String, ctx: BTContext, arg: Variant = null) -> bool:
 					== GridTypes.BlockType.ICE
 		"here_is_water":
 			return probe.world.water_depth_at(probe.cell) != GridTypes.WaterDepth.DRY
+		"here_water_is_deep":
+			# Hladina sahá výš než do poloviny buňky, ve které robot je (§9.4).
+			# Pro vylezení na břeh o patro výš to je zároveň podmínka „hladina
+			# je v rovině toho břehu" — viz komentář ve stromu `dul`.
+			return probe.world.water_depth_at(probe.cell) == GridTypes.WaterDepth.DEEP
 		"carrying_at_most":
 			var robot := probe.robot()
 			if robot == null:
@@ -143,6 +152,44 @@ static func cell_free_for_robot(probe: GridProbe, target: Vector3i) -> bool:
 	if depth == GridTypes.WaterDepth.DEEP and not GridTypes.can_enter_deep_water(robot.kind):
 		return false
 	return true
+
+## Smí robot vstoupit ze břehu do nádrže, do které se dívá?
+##
+## Design dok. §1.1.2: Dul do vody vstoupí jen tehdy, je-li hladina ve stejné
+## výšce jako povrch, na kterém stojí. §2.1.4 k tomu dává toleranci: stačí,
+## když nádrži do plné výšky chybí méně než polovina kostek tvořících hladinu,
+## tedy méně než půl kostky. Obojí je jedna podmínka na výšku hladiny vůči
+## rovině pod robotem; zlomek se řeší křížovým násobením, žádný float (P2).
+##
+## Schopnost je Dulova (§1.1.2), proto predikát ostatním robotům vrací false.
+## Používá ho jen strom `dul`, kontrola druhu je tedy pojistka pro případ, že
+## by predikát někdo použil i jinde.
+static func water_ahead_is_boardable(probe: GridProbe) -> bool:
+	var robot := probe.robot()
+	if robot == null or robot.kind != GridTypes.RobotKind.DUL:
+		return false
+	var world := probe.world
+	var index := world.reservoir_at(probe.cell_ahead())
+	if index == -1:
+		# Dutina nemusí sahat až k rovině břehu — hladina pak leží o patro níž.
+		index = world.reservoir_at(probe.cell_ahead_below())
+	if index == -1:
+		return false
+	var res: ReservoirState = world.reservoirs[index]
+	if res.cells.is_empty():
+		return false
+
+	var surface := WaterSystem.surface(res)
+	var y_top: int = surface[0]
+	var remaining: int = surface[1]
+	var floor_y := probe.cell.y   # rovina, na které robot stojí
+	if y_top >= floor_y:
+		return true               # hladina je v rovině nohou nebo výš
+	if y_top != floor_y - 1:
+		return false              # chybí víc než celá kostka
+	# Hladina leží uvnitř vrstvy pod robotem — chybět smí méně než půl kostky.
+	var capacity := res.capacity_of_layer(y_top)
+	return capacity > 0 and 2 * remaining > capacity
 
 ## Cíl je průchodný, když je odemčený, nebo jím prochází nositel klíče (§14).
 static func target_is_open(world: WorldState, robot_index: int) -> bool:
