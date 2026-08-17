@@ -10,7 +10,6 @@ var cell: Vector3i = Vector3i.ZERO
 var facing: int = GridTypes.Direction.NORTH  # vždy < 4
 var inventory: Array = []                     # ItemType, kapacita dle §12
 var hopper_full: bool = false                 # Han: korba; Dul: cisterna
-var controlling_device: int = -1              # Il: index zařízení, nebo -1
 var cannot_land_cell: Vector3i = NO_CELL      # Da: kam po odhození nesmí přistát
 var in_target: bool = false
 
@@ -47,7 +46,6 @@ func duplicate_state() -> RobotState:
 	copy.facing = facing
 	copy.inventory = inventory.duplicate()
 	copy.hopper_full = hopper_full
-	copy.controlling_device = controlling_device
 	copy.cannot_land_cell = cannot_land_cell
 	copy.in_target = in_target
 	return copy

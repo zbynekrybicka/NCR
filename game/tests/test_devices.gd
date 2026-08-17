@@ -21,54 +21,70 @@ func _platform_level(weight_limit: int = 0, rider: bool = false) -> Simulation:
 				weight_limit, [0], [1])
 	return builder.simulate()
 
-func test_il_takes_control_and_moves_the_platform() -> void:
+## Jeden stisk akce 1 = jedno sepnutí; žádný režim ovládání neexistuje
+## (design dok. §1.1.7).
+func test_il_switches_the_control_unit_and_moves_the_platform() -> void:
 	var sim := _platform_level()
-	var taken := action_1(sim)
-	t.is_true(taken.accepted, "Il převezme kontrolu nad řídicí jednotkou")
-	t.equal(sim.world.robots[0].controlling_device, 1, "drží si ovládané zařízení")
-	t.is_true(taken.has_event(Event.EventType.DEVICE_CONTROL_TAKEN), "událost převzetí")
-
-	var input := submit(sim, Command.CommandType.DEVICE_INPUT)
-	t.is_true(input.accepted, "vstup do zařízení projde")
+	var input := action_1(sim)
+	t.is_true(input.accepted, "Il sepne řídicí jednotku")
 	t.equal(sim.world.block_at(Vector3i(3, 2, 0)), GridTypes.BlockType.WALL,
 			"plošina přejela do druhé polohy")
 	t.equal(sim.world.block_at(Vector3i(3, 1, 0)), GridTypes.BlockType.EMPTY,
 			"a v původní poloze už není")
 	t.is_true(input.has_event(Event.EventType.PLATFORM_MOVED), "událost přejezdu")
 
-func test_control_survives_robot_switch() -> void:
-	var sim := _platform_level(0, true)
+## Sepnutí funkční skříně přepíná napájení (§13.1, O8).
+func test_il_toggles_the_power_cabinet() -> void:
+	var sim := LevelBuilder.new() \
+		.layer(0, "####") \
+		.layer(1, ".L#.") \
+		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(2, 1, 0),
+				GridTypes.Direction.WEST) \
+		.simulate()
+	t.is_true(sim.world.devices[0].is_on, "skříň bez poruchy startuje pod napětím")
+
+	var off := action_1(sim)
+	t.is_true(off.accepted, "stisk projde")
+	t.is_false(sim.world.devices[0].is_on, "a skříň vypne")
+	t.is_true(off.has_event(Event.EventType.DEVICE_TOGGLED), "událost přepnutí")
+
 	action_1(sim)
-	t.equal(sim.world.robots[0].controlling_device, 1, "Il ovládá jednotku")
-	submit(sim, Command.CommandType.SWITCH_ROBOT_TO, 1)
-	submit(sim, Command.CommandType.SWITCH_ROBOT_TO, 0)
-	t.equal(sim.world.robots[0].controlling_device, 1,
-			"ovládání přepnutí robota přežije (§13.1)")
-	var released := action_2(sim)
-	t.is_true(released.accepted, "akce 2 ovládání ukončí")
-	t.equal(sim.world.robots[0].controlling_device, -1, "a Il je zase sám za sebe")
+	t.is_true(sim.world.devices[0].is_on, "další stisk ji zase zapne")
+
+## Akce 2 Ila jen odkládá service kit — žádné opouštění ovládání už neexistuje.
+func test_il_action_2_drops_the_service_kit() -> void:
+	var sim := LevelBuilder.new() \
+		.layer(0, "####") \
+		.layer(1, ".L#.") \
+		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(2, 1, 0),
+				GridTypes.Direction.WEST) \
+		.simulate()
+	t.is_false(action_2(sim).accepted, "s prázdným inventářem není co odložit")
+
+	sim.world.robots[0].inventory.append(GridTypes.ItemType.SERVICE_KIT)
+	var dropped := action_2(sim)
+	t.is_true(dropped.accepted, "kit se odloží")
+	t.is_true(sim.world.robots[0].inventory.is_empty(), "a zmizí z inventáře")
+	t.equal(sim.world.item_at(Vector3i(0, 1, 0)), GridTypes.ItemType.SERVICE_KIT,
+			"leží za robotem")
 
 func test_platform_carries_the_robot_standing_on_it() -> void:
 	var sim := _platform_level(2, true)
 	t.equal(sim.world.robots[1].cell, Vector3i(3, 2, 0), "Han stojí na plošině")
 	action_1(sim)
-	submit(sim, Command.CommandType.DEVICE_INPUT)
 	t.equal(sim.world.robots[1].cell, Vector3i(3, 3, 0), "vyjel s plošinou nahoru")
 
 ## Hmotnostní limit je spouštěcí práh: pod ním se plošina nehne, na něm
 ## a nad ním ano (design dok. §2.2.1).
 func test_platform_needs_the_trigger_weight() -> void:
 	var sim := _platform_level(3, true)
-	action_1(sim)
-	var input := submit(sim, Command.CommandType.DEVICE_INPUT)
+	var input := action_1(sim)
 	t.is_false(input.accepted, "pod prahem se plošina nehne")
 	t.equal(sim.world.block_at(Vector3i(3, 1, 0)), GridTypes.BlockType.WALL,
 			"plošina zůstala dole")
 
 	var loaded := _platform_level(2, true)
-	action_1(loaded)
-	t.is_true(submit(loaded, Command.CommandType.DEVICE_INPUT).accepted,
-			"s dost těžkým nákladem se rozjede")
+	t.is_true(action_1(loaded).accepted, "s dost těžkým nákladem se rozjede")
 
 ## Zařízení v kostce plošiny je její pevnou součástí a přesune se s ní
 ## (design dok. §2.2.1) — jinak by zůstalo viset na staré souřadnici.
@@ -87,8 +103,7 @@ func test_platform_carries_its_own_device() -> void:
 		.platform([Vector3i(3, 1, 0)], Vector3i.ZERO, Vector3i(0, 1, 0), 0, [0], [1]) \
 		.simulate()
 
-	action_1(sim)
-	t.is_true(submit(sim, Command.CommandType.DEVICE_INPUT).accepted, "plošina přejela")
+	t.is_true(action_1(sim).accepted, "plošina přejela")
 	t.equal(sim.world.devices[2].cell, Vector3i(3, 2, 0),
 			"skříň na plošině jela s ní")
 	t.equal(sim.world.device_at(Vector3i(3, 2, 0)), 2,
@@ -96,11 +111,32 @@ func test_platform_carries_its_own_device() -> void:
 	t.equal(sim.world.devices[0].cell, Vector3i(4, 1, 0),
 			"skříň mimo plošinu zůstala na místě")
 
+## Klíč i odložené předměty na plošině jedou s ní (design dok. §2.2.1) —
+## jinak by po přejezdu zůstaly viset ve vzduchu nad starou polohou.
+func test_platform_carries_the_key_and_the_items_on_it() -> void:
+	var sim := LevelBuilder.new() \
+		.layer(0, "######") \
+		.layer(1, ".L####") \
+		.layer(2, "...+f.") \
+		.layer(3, "......") \
+		.device(GridTypes.DeviceKind.CONTROL_UNIT, Vector3i(2, 1, 0),
+				GridTypes.Direction.WEST, GridTypes.ControlMode.BUTTON) \
+		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(5, 1, 0),
+				GridTypes.Direction.WEST) \
+		.platform([Vector3i(3, 1, 0), Vector3i(4, 1, 0)], Vector3i.ZERO,
+				Vector3i(0, 1, 0), 0, [1], [0]) \
+		.simulate()
+
+	t.is_true(action_1(sim).accepted, "plošina přejela")
+	t.equal(sim.world.key_position, Vector3i(3, 3, 0), "klíč vyjel s plošinou")
+	t.equal(sim.world.item_at(Vector3i(4, 3, 0)), GridTypes.ItemType.FUEL,
+			"kanystr vyjel s plošinou")
+	t.is_false(sim.world.has_item_at(Vector3i(4, 2, 0)),
+			"a ve staré poloze už neleží")
+
 func test_empty_platform_with_a_threshold_stays_put() -> void:
 	var sim := _platform_level(2, false)
-	action_1(sim)
-	t.is_false(submit(sim, Command.CommandType.DEVICE_INPUT).accepted,
-			"prázdná plošina práh nesplní")
+	t.is_false(action_1(sim).accepted, "prázdná plošina práh nesplní")
 
 func test_broken_device_needs_a_service_kit() -> void:
 	var sim := LevelBuilder.new() \
@@ -274,6 +310,71 @@ func test_automatic_pump_fires_once_on_the_rising_edge() -> void:
 	DeviceSystem.run_automatics(world, events)
 	t.equal(world.reservoirs[0].volume_units, 0, "doplněný zdroj čerpadlo sepne znovu")
 	t.equal(world.reservoirs[1].volume_units, 6, "a doteče do cíle")
+
+## ── Přepínač nad čerpadlem (§13.1) ────────────────────────────────────────
+##
+## Il stojí u řídicí jednotky (zařízení 1) ve zdi mezi dvěma nádržemi;
+## zařízení 0 je napájecí skříň. Čerpadlo 0 je obousměrné a napojené právě
+## na tu řídicí jednotku.
+func _switch_pump_level(volume_a: int, volume_b: int,
+		control_mode: int = GridTypes.ControlMode.SWITCH,
+		bidirectional: bool = true) -> Simulation:
+	return LevelBuilder.new() \
+		.layer(0, "##########\n##########\n##########") \
+		.layer(1, "##########\n#...##...#\n##########") \
+		.layer(2, "##########\n#...##...#\n####L#####") \
+		.reservoir(Vector3i(1, 1, 1), volume_a) \
+		.reservoir(Vector3i(6, 1, 1), volume_b) \
+		.device(GridTypes.DeviceKind.POWER_CABINET, Vector3i(5, 2, 1),
+				GridTypes.Direction.SOUTH) \
+		.device(GridTypes.DeviceKind.CONTROL_UNIT, Vector3i(4, 2, 1),
+				GridTypes.Direction.SOUTH, control_mode) \
+		.pump(0, 1, [0], 1, bidirectional) \
+		.facing(GridTypes.RobotKind.IL, GridTypes.Direction.NORTH) \
+		.simulate()
+
+## Přepnutí přepínače přečerpá celý obsah zdroje a zároveň prohodí zdrojovou
+## a cílovou nádrž — další sepnutí čerpá zpátky (design dok. §2.2.1, §13.1).
+func test_switch_pumps_and_swaps_source_and_target() -> void:
+	var sim := _switch_pump_level(6, 0)
+	var first := action_1(sim)
+	t.is_true(first.accepted, "první sepnutí projde: " + first.reason)
+	t.equal(sim.world.reservoirs[0].volume_units, 0, "zdroj se vyprázdnil")
+	t.equal(sim.world.reservoirs[1].volume_units, 6, "celý obsah je v cíli")
+	t.equal(sim.world.pumps[0].current_direction, 1, "a nádrže se prohodily")
+	t.is_true(first.has_event(Event.EventType.PUMP_TRANSFERRED), "událost přenosu")
+
+	var second := action_1(sim)
+	t.is_true(second.accepted, "druhé sepnutí projde: " + second.reason)
+	t.equal(sim.world.reservoirs[0].volume_units, 6, "voda se vrátila zpátky")
+	t.equal(sim.world.reservoirs[1].volume_units, 0, "a v druhé nádrži nezůstala")
+	t.equal(sim.world.pumps[0].current_direction, 0, "směr je zase výchozí")
+
+## Tlačítko čerpá pořád stejným, předem daným směrem — i když je čerpadlo
+## obousměrné (design dok. §2.2.1).
+func test_button_always_pumps_in_the_default_direction() -> void:
+	var sim := _switch_pump_level(6, 0, GridTypes.ControlMode.BUTTON)
+	t.is_true(action_1(sim).accepted, "první sepnutí")
+	t.equal(sim.world.pumps[0].current_direction, 0, "tlačítko směr nemění")
+	t.is_false(action_1(sim).accepted,
+			"druhé sepnutí nemá co čerpat — zdroj je prázdný")
+	t.equal(sim.world.reservoirs[1].volume_units, 6, "voda zůstala v cíli")
+
+## Nedá-li se přenos provést, přepínač směr NEprohodí a příkaz se odmítne —
+## odmítnutý příkaz nesmí měnit stav (P5).
+func test_switch_does_not_swap_when_the_transfer_is_impossible() -> void:
+	var sim := _switch_pump_level(0, 6)
+	var rejected := action_1(sim)
+	t.is_false(rejected.accepted, "z prázdného zdroje se nečerpá")
+	t.equal(sim.world.pumps[0].current_direction, 0, "směr zůstal beze změny")
+	t.equal(sim.world.reservoirs[1].volume_units, 6, "a voda se nehnula")
+
+## Jednosměrné čerpadlo se přepínačem obrátit nedá — čerpá pořád A → B.
+func test_switch_over_a_one_way_pump_keeps_the_direction() -> void:
+	var sim := _switch_pump_level(6, 0, GridTypes.ControlMode.SWITCH, false)
+	t.is_true(action_1(sim).accepted, "přenos projde")
+	t.equal(sim.world.pumps[0].current_direction, 0,
+			"jednosměrné čerpadlo si směr drží")
 
 func test_automatic_pump_waits_until_the_target_has_room() -> void:
 	# Cíl je plný (kapacita 12 jednotek, viz test výše — 6 buněk po 2).

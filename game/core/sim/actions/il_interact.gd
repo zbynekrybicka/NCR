@@ -1,10 +1,11 @@
 class_name IlInteract
 extends Action
 
-## Il, Akce 1 — oprava zařízení nebo převzetí kontroly (§7.6, §13.1,
-## design dokument §1.1.7).
+## Il, Akce 1 — oprava zařízení nebo jeho sepnutí (§7.6, §13.1,
+## design dokument §1.1.7). Sepnutí je jednorázové: jeden stisk = jedno
+## stisknutí tlačítka / přehození přepínače, žádný režim ovládání neexistuje.
 
-enum IlResult { REPAIR, TAKE_CONTROL }
+enum IlResult { REPAIR, INPUT }
 
 func validate(world: WorldState, robot_index: int) -> Validation:
 	var robot: RobotState = world.robots[robot_index]
@@ -24,7 +25,13 @@ func validate(world: WorldState, robot_index: int) -> Validation:
 
 	if not device.is_accessible_from(robot.cell, robot.facing):
 		return Validation.reject("k zařízení se nedá dostat z tohoto směru")
-	return Validation.accept({"device": device_index, "result": IlResult.TAKE_CONTROL})
+
+	# Jestli sepnutí něco udělá, závisí na stavu napojených plošin a čerpadel —
+	# ptá se na to čistá kontrola, aby akce zůstala validovatelná dopředu (§13.1).
+	var input := DeviceSystem.device_input_validate(world, device_index)
+	if not input.ok:
+		return input
+	return Validation.accept({"device": device_index, "result": IlResult.INPUT})
 
 func apply(world: WorldState, robot_index: int, validation: Validation,
 		out_events: Array) -> void:
@@ -43,5 +50,4 @@ func apply(world: WorldState, robot_index: int, validation: Validation,
 		out_events.append(Event.device_repaired(device_index))
 		return
 
-	robot.controlling_device = device_index
-	out_events.append(Event.device_control_taken(robot_index, device_index))
+	DeviceSystem.device_input(world, device_index, out_events)

@@ -3,9 +3,8 @@ extends RefCounted
 
 ## Elektrická zařízení, transportní plošiny a čerpadla (§13).
 ##
-## Během ovládání zařízení míří DEVICE_INPUT na zařízení, ne na robota.
-## Převzetí kontroly = přímé ovládání jeho vstupů, jako by je ovládala sama
-## řídicí jednotka.
+## Zařízení sepíná Il svojí akcí 1 — jeden stisk = jedno sepnutí, žádný režim
+## ovládání neexistuje (design dokument §1.1.7).
 
 ## Skříň bez poruchy je po startu pod napětím.
 static func initialize(world: WorldState) -> void:
@@ -107,6 +106,11 @@ static func move_platform(world: WorldState, platform_index: int, validation: Va
 	var riders: Array = validation.data["riders"]
 	var from_offset := platform.current_offset()
 
+	# 0) buňky nad plošinou — co v nich leží, jede s plošinou (§2.2.1)
+	var top_cells := {}
+	for cell in platform.occupied_cells():
+		top_cells[cell + GridTypes.UP_VECTOR] = true
+
 	# 1) sejmout bloky ze starých pozic (i s jejich orientací)
 	var carried: Array = []
 	for cell in platform.occupied_cells():
@@ -122,6 +126,20 @@ static func move_platform(world: WorldState, platform_index: int, validation: Va
 		robot.cell = from + delta
 		out_events.append(Event.robot_moved(rider_index, from, robot.cell,
 				GridTypes.Substep.FORWARD))
+
+	# 2b) klíč a odložené předměty ležící na plošině jedou s ní stejně jako
+	#     roboti (design dok. §2.2.1) — jinak by zůstaly nad starou polohou
+	if world.key_holder == -1 and top_cells.has(world.key_position):
+		world.key_position += delta
+
+	var moved_items: Array = []
+	for cell in world.items_on_ground.keys():
+		if top_cells.has(cell):
+			moved_items.append([cell, world.item_at(cell)])
+	for entry in moved_items:
+		world.take_item_at(entry[0])
+	for entry in moved_items:
+		world.put_item_at(entry[0] + delta, entry[1])
 
 	# 3) položit bloky na nové pozice
 	for entry in carried:
@@ -183,24 +201,50 @@ static func transfer(world: WorldState, pump_index: int, validation: Validation,
 	WaterSystem.change_volume(world, target, units, out_events)
 	out_events.append(Event.pump_transferred(pump_index, source, target, units))
 
-# ── Vstup do ovládaného zařízení (§13.1) ───────────────────────────────────
+# ── Sepnutí zařízení (§13.1) ───────────────────────────────────────────────
 
-static func device_input(world: WorldState, robot_index: int, out_events: Array) -> Validation:
-	var robot: RobotState = world.robots[robot_index]
-	if robot.controlling_device == -1:
-		return Validation.reject("robot neovládá žádné zařízení")
-	var device_index := robot.controlling_device
+## Udělá stisk tlačítka / přehození přepínače vůbec něco? Čistá kontrola pro
+## validaci Ilovy akce 1 — prochází plošiny a čerpadla ve stejném pořadí jako
+## `device_input`, takže první položka, která projde tady, projde i tam.
+static func device_input_validate(world: WorldState, device_index: int) -> Validation:
 	var device: DeviceState = world.devices[device_index]
 	if device.is_broken:
 		return Validation.reject("zařízení je rozbité")
 
-	# Skříň: přímé ovládání znamená přepnutí napájení.
+	# Skříň: sepnutí přepíná napájení, to jde vždycky.
 	if device.kind == GridTypes.DeviceKind.POWER_CABINET:
-		device.is_on = not device.is_on
 		return Validation.accept({})
 
-	var acted := false
 	var last_reason := "řídicí jednotka není na nic napojená"
+	for platform_index in world.platforms.size():
+		var platform: PlatformState = world.platforms[platform_index]
+		if not platform.linked_control_units.has(device_index):
+			continue
+		var validation := platform_can_move(world, platform_index)
+		if validation.ok:
+			return Validation.accept({})
+		last_reason = validation.reason
+
+	for pump_index in world.pumps.size():
+		var pump: PumpState = world.pumps[pump_index]
+		if pump.linked_control_unit != device_index:
+			continue
+		var validation := pump_can_transfer(world, pump_index, pump.current_direction)
+		if validation.ok:
+			return Validation.accept({})
+		last_reason = validation.reason
+
+	return Validation.reject(last_reason)
+
+## Provedení sepnutí. Každý dílčí přejezd/přenos se validuje znovu těsně před
+## provedením — dřívější přejezd mohl podmínky dalšího zařízení změnit.
+static func device_input(world: WorldState, device_index: int, out_events: Array) -> void:
+	var device: DeviceState = world.devices[device_index]
+
+	if device.kind == GridTypes.DeviceKind.POWER_CABINET:
+		device.is_on = not device.is_on
+		out_events.append(Event.device_toggled(device_index, device.is_on))
+		return
 
 	for platform_index in world.platforms.size():
 		var platform: PlatformState = world.platforms[platform_index]
@@ -208,31 +252,22 @@ static func device_input(world: WorldState, robot_index: int, out_events: Array)
 			continue
 		var validation := platform_can_move(world, platform_index)
 		if not validation.ok:
-			last_reason = validation.reason
 			continue
 		move_platform(world, platform_index, validation, out_events)
-		acted = true
 
 	for pump_index in world.pumps.size():
 		var pump: PumpState = world.pumps[pump_index]
 		if pump.linked_control_unit != device_index:
 			continue
-		var direction := pump.current_direction
-		var validation := pump_can_transfer(world, pump_index, direction)
+		var validation := pump_can_transfer(world, pump_index, pump.current_direction)
 		if not validation.ok:
-			last_reason = validation.reason
 			continue
 		transfer(world, pump_index, validation, out_events)
-		acted = true
 		# Přepínač přečerpává střídavě jedním i druhým směrem (§13.1).
 		if device.control_mode == GridTypes.ControlMode.SWITCH and pump.bidirectional:
 			pump.current_direction = 1 - pump.current_direction
 		else:
 			pump.current_direction = pump.default_direction
-
-	if not acted:
-		return Validation.reject(last_reason)
-	return Validation.accept({})
 
 # ── Automatika (§13.2, §13.3) ──────────────────────────────────────────────
 

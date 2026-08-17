@@ -13,7 +13,6 @@ const STEP_DOWN := "step_down"
 const ACTION_1 := "action_1"
 const ACTION_2 := "action_2"
 const SWITCH_ROBOT := "switch_robot"
-const DEVICE_INPUT := "device_input"
 const CAMERA_FIRST_PERSON := "camera_first_person"
 const RESTART_LEVEL := "restart_level"
 const SKIP_ANIMATION := "skip_animation"
@@ -29,7 +28,6 @@ const DEFAULTS := {
 	ACTION_1: [KEY_Q],
 	ACTION_2: [KEY_E],
 	SWITCH_ROBOT: [KEY_TAB],
-	DEVICE_INPUT: [KEY_ENTER],
 	CAMERA_FIRST_PERSON: [KEY_F],
 	RESTART_LEVEL: [KEY_R],
 	SKIP_ANIMATION: [KEY_ESCAPE],
@@ -47,7 +45,6 @@ const COMMAND_FOR := {
 	ACTION_1: Command.CommandType.ACTION_1,
 	ACTION_2: Command.CommandType.ACTION_2,
 	SWITCH_ROBOT: Command.CommandType.SWITCH_ROBOT_NEXT,
-	DEVICE_INPUT: Command.CommandType.DEVICE_INPUT,
 	RESTART_LEVEL: Command.CommandType.RESTART_LEVEL,
 }
 

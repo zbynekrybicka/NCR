@@ -23,8 +23,7 @@ enum EventType {
 	ICE_MELTED,
 	# Zařízení
 	DEVICE_REPAIRED,
-	DEVICE_CONTROL_TAKEN,
-	DEVICE_CONTROL_RELEASED,
+	DEVICE_TOGGLED,
 	PLATFORM_MOVED,
 	PUMP_TRANSFERRED,
 	# Řízení
@@ -96,11 +95,9 @@ static func ice_melted(cell: Vector3i, reservoir: int) -> Event:
 static func device_repaired(device: int) -> Event:
 	return Event.new(EventType.DEVICE_REPAIRED, {"device": device})
 
-static func device_control_taken(robot: int, device: int) -> Event:
-	return Event.new(EventType.DEVICE_CONTROL_TAKEN, {"robot": robot, "device": device})
-
-static func device_control_released(robot: int, device: int) -> Event:
-	return Event.new(EventType.DEVICE_CONTROL_RELEASED, {"robot": robot, "device": device})
+## Il přepnul napájení elektrické skříně (§13.1).
+static func device_toggled(device: int, is_on: bool) -> Event:
+	return Event.new(EventType.DEVICE_TOGGLED, {"device": device, "is_on": is_on})
 
 static func platform_moved(platform: int, from_offset: Vector3i, to_offset: Vector3i) -> Event:
 	return Event.new(EventType.PLATFORM_MOVED,

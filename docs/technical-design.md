@@ -243,7 +243,6 @@ var cell: Vector3i
 var facing: Direction                 # vždy < 4
 var inventory: Array[ItemType]        # kapacita dle §12
 var hopper_full: bool                 # Han: korba; Dul: cisterna
-var controlling_device: int           # Il: index ovládaného zařízení, nebo -1
 var cannot_land_cell: Vector3i        # Da: buňka, kam po odhození předmětu nesmí přistát
 var in_target: bool
 ```
@@ -275,7 +274,6 @@ enum CommandType {
     ACTION_1, ACTION_2,
     SWITCH_ROBOT_NEXT,      # Tab
     SWITCH_ROBOT_TO,        # klik v UI, nese cílový index
-    DEVICE_INPUT,           # vstup do zařízení, které Il právě ovládá
     RESTART_LEVEL,
 }
 ```
@@ -319,8 +317,7 @@ IceMelted(cell, reservoir)
 
 # Zařízení
 DeviceRepaired(device)
-DeviceControlTaken(robot, device)
-DeviceControlReleased(robot, device)
+DeviceToggled(device, is_on)       # skříň: Il přepnul napájení
 PlatformMoved(platform, from_offset, to_offset)
 PumpTransferred(pump, from_reservoir, to_reservoir, units)
 
@@ -907,7 +904,7 @@ Rozhodovací logika je potřeba i mimo krok. Design dokument §2.1.2 ji zmiňuje
      ════════════════════════════════════════════════════════════════════ -->
 
 <!-- ════════════════════════════════════════════════════════════════════
-     ROZHODOVACÍ STROM — AKCE 1/2: IL (převzetí kontroly, oprava, opuštění)
+     ROZHODOVACÍ STROM — AKCE 1/2: IL (oprava, sepnutí panelu, odložení kitu)
      ════════════════════════════════════════════════════════════════════
      Design dokument §1.1.7. Na rozdíl od ostatních
      akcí tu není žádný BT nad GridProbe — jde jen o krátké rozhodnutí nad
@@ -925,38 +922,31 @@ Rozhodovací logika je potřeba i mimo krok. Design dokument §2.1.2 ji zmiňuje
          Sequence "rozbité bez kitu":
            Condition ahead_is_device            → TRUE
            Condition device_is_broken(ahead)     → TRUE
-           Fail                                   # nelze opravit ani
-                                                    # převzít kontrolu
-         Sequence "převzetí kontroly":
+           Fail                                   # nelze opravit ani sepnout
+         Sequence "sepnutí panelu":
            Condition ahead_is_device            → TRUE
            Condition device_is_broken(ahead)     → FALSE
            Condition ahead_facing_access_direction → TRUE   (§13.1: Il musí
                                                     stát ve správném směru)
-           Emit(TakeControl(ahead))               # DeviceControlTaken,
-                                                    # robot.controlling_device = idx
+           Condition device_input_would_do_something(ahead) → TRUE
+           Emit(DeviceInput(ahead))               # skříň: přepnutí napájení
+                                                    # + DeviceToggled;
+                                                    # jednotka: PlatformMoved
+                                                    # / PumpTransferred
          Fail
 
      Akce 2 (ACTION_2):
-       Selector "akce 2 il":
-         Sequence "opuštění ovládání":
-           Condition robot.controlling_device != -1  → TRUE
-           Emit(ReleaseControl())                 # DeviceControlReleased,
-                                                    # robot.controlling_device = -1
-         Sequence "odložení kitu":
-           Condition has_item(robot, SERVICE_KIT)  → TRUE
-           Condition has_free_space_behind(robot)   → TRUE
-           Emit(DropItem(SERVICE_KIT, behind(1)))
-         Fail
+       Sequence "odložení kitu":
+         Condition has_item(robot, SERVICE_KIT)  → TRUE
+         Condition has_free_space_behind(robot)   → TRUE
+         Emit(DropItem(SERVICE_KIT, behind(1)))
 
-     Přepnutí aktivního robota pryč z Ila, zatímco `controlling_device != -1`,
-     ovládání panelu **neukončí** — zůstává aktivní, dokud se od něj Il
-     výslovně neodpojí Akcí 2 (design dokument §1.1.7). Technicky: `controlling_device` je stav robota, ne stav relace
-     ovládání vázané na to, že je právě aktivní — přepnutí na jiného robota
-     a zpět na Ila jen změní `active_robot_index`, `DEVICE_INPUT` se pak
-     opět směruje na totéž zařízení. Toto je zvláštní případ pro
-     `is_safe_to_leave(Il)` ([§10](#10-specifikace-robotů)): Il, který právě
-     ovládá zařízení, smí být bez obav opuštěn — na rozdíl od Da tu žádné
-     nestabilní mezistav nehrozí.
+     Žádný „režim ovládání zařízení" neexistuje: jeden stisk Akce 1 je jedno
+     sepnutí panelu, robot si mezi příkazy nedrží žádnou vazbu na zařízení
+     (design dokument §1.1.7). Il proto nemá ani zvláštní případ pro
+     `is_safe_to_leave` ([§10](#10-specifikace-robotů)) — přepnutí pryč
+     z Ila je vždy bezpečné, protože žádný mezistav trvající přes hranici
+     mezi příkazy hráče u něj nevzniká.
 
      ════════════════════════════════════════════════════════════════════ -->
 
@@ -1017,9 +1007,9 @@ Rozhodovací logika je potřeba i mimo krok. Design dokument §2.1.2 ji zmiňuje
      jediný robot, u kterého existuje mezistav trvající přes hranici mezi
      příkazy hráče, ve kterém by přepnutí nebylo bezpečné.
 
-     Il: přepnutí je vždy bezpečné, i uprostřed ovládání zařízení —
-     `controlling_device` přežije přepnutí beze změny, viz Il akce 1/2
-     výše (design dokument §1.1.7).
+     Il: přepnutí je vždy bezpečné — sepnutí panelu je jednorázová akce
+     bez jakéhokoli navazujícího stavu, viz Il akce 1/2 výše
+     (design dokument §1.1.7).
 
      Net na stěně během šplhání: přepnutí je vždy bezpečné, protože
      šplhání (nahoru i dolů) se nikdy nezastaví v mezistavu viditelném
@@ -1180,7 +1170,7 @@ Přepis design dokumentu §1.1 do implementovatelné tabulky. **Sloupec „hmotn
 | Net | 2 | 4 | jen `SHALLOW` | klouže | — | Odložení předmětu |
 | Da | 1 | 1 | ne | letí nad | — | Odhození předmětu |
 | Yeo | 2 | 4 | jen `SHALLOW` | **chodí** | Vytvoření ledu | Odložení kanystru |
-| Il | 2 | 4 | jen `SHALLOW` | klouže | Interakce/oprava | Odložení kitu / opuštění |
+| Il | 2 | 4 | jen `SHALLOW` | klouže | Interakce/oprava | Odložení kitu |
 
 **Zvláštní schopnosti mimo krok:**
 
@@ -1189,7 +1179,7 @@ Přepis design dokumentu §1.1 do implementovatelné tabulky. **Sloupec „hmotn
 - **Da** — létá volně vodorovně i svisle; nesmí zůstat ve vzduchu při přepnutí; předmět sbírá jen shora.
 - **Yeo** — po ledu chodí jako po souši, což je jediná výjimka z klouzání.
 
-**Přepínání aktivního robota.** Sekvence je pevná a cyklická (`robot_sequence`). `SWITCH_ROBOT_NEXT` posune index; `SWITCH_ROBOT_TO` skočí přímo. Obojí validuje podmínku „robot je v bezpečí", implementovanou jako predikát `is_safe_to_leave(robot)`. Da musí stát na pevném podkladu; pro všechny ostatní roboty vrací `true` bez dalších podmínek — Il si podrží `controlling_device` přes přepnutí (§13.1) a Net nikdy nezůstává v mezistavu šplhání mezi příkazy hráče (§7.6), takže tam žádný ekvivalent Daova letu nevzniká.
+**Přepínání aktivního robota.** Sekvence je pevná a cyklická (`robot_sequence`). `SWITCH_ROBOT_NEXT` posune index; `SWITCH_ROBOT_TO` skočí přímo. Obojí validuje podmínku „robot je v bezpečí", implementovanou jako predikát `is_safe_to_leave(robot)`. Da musí stát na pevném podkladu; pro všechny ostatní roboty vrací `true` bez dalších podmínek — Il sepne panel jednorázově a nedrží si k němu žádnou vazbu (§13.1) a Net nikdy nezůstává v mezistavu šplhání mezi příkazy hráče (§7.6), takže tam žádný ekvivalent Daova letu nevzniká.
 
 ---
 
@@ -1206,7 +1196,7 @@ Sdílené validační predikáty (jedna implementace, používá je víc akcí):
 
 | Predikát | Použití |
 |---|---|
-| `has_free_space_behind(robot)` | Han a2, Set a2, Net a2, Yeo a2, Il a2 (odložení, ne opuštění ovládání) |
+| `has_free_space_behind(robot)` | Han a2, Set a2, Net a2, Yeo a2, Il a2 |
 | `no_robot_below(cell)` | Han a1, Set a1 (dřevo) |
 | `landing_cell_for_drop(cell)` | Han a2, Set/Net/Yeo/Il a2 (odložení předmětu), Da a2 — kam předmět/kostka dopadne |
 | `no_robot_at(cell)` | Han a2, Set/Net/Yeo/Il a2, Da a2 (místo dopadu) |
@@ -1257,22 +1247,21 @@ Il musí stát v sousední buňce ve směru `access_direction` a být otočený 
 Akce 1 Ila:
 - zařízení `is_broken == true` a Il má `SERVICE_KIT` → oprava, kit se spotřebuje, `DeviceRepaired`; u skříně se přitom nastaví i `is_on = true` — opravená skříň je rovnou pod napětím, stejně jako skříň bez poruchy po `DeviceSystem.initialize` (design dokument §1.1.7). Samotné `is_broken = false` nestačí: `cabinets_powered` vyžaduje obojí, takže by napojené automatické čerpadlo/plošina po opravě zůstaly stát;
 - zařízení `is_broken == true` a Il nemá kit → odmítnuto;
-- zařízení funkční → převzetí kontroly, `DeviceControlTaken`, `robot.controlling_device = idx`.
+- zařízení funkční a Il stojí ve směru `access_direction` → **sepnutí zařízení** (`DeviceSystem.device_input`), viz sémantika níže. Nemá-li sepnutí co udělat, je akce odmítnutá.
 
-Akce 2 Ila:
-- pokud ovládá zařízení → opuštění kontroly, `DeviceControlReleased`;
-- jinak → odložení service kitu za sebe.
+Akce 2 Ila: odložení service kitu za sebe (sdílená akce `DropItem`, [§11](#11-akce)).
 
-Během ovládání zařízení míří `DEVICE_INPUT` na zařízení, ne na robota. Sémantika ovládání:
+**Žádný „režim ovládání zařízení" neexistuje.** Jeden stisk Akce 1 = jedno sepnutí; `RobotState` si mezi příkazy nedrží žádnou vazbu na zařízení a neexistuje ani samostatný příkaz `DEVICE_INPUT` — je to jen vnitřní krok akce 1. (Dřívější návrh počítal s převzetím kontroly, zvláštním příkazem pro vstup do ovládaného zařízení a jeho opuštěním Akcí 2; to bylo z designu zrušeno jako zbytečné.)
 
-- **Plošina + `BUTTON`:** `DEVICE_INPUT` vyvolá jednorázový přejezd do druhé polohy.
-- **Plošina + `SWITCH`:** `DEVICE_INPUT` posílá plošinu střídavě do polohy A i B (přepínač).
-- **Čerpadlo + `BUTTON`:** `DEVICE_INPUT` vyvolá jednorázové přečerpání předem daným směrem (`default_direction`).
-- **Čerpadlo + `SWITCH`:** `DEVICE_INPUT` přečerpává střídavě jedním i druhým směrem.
+Sémantika sepnutí:
 
-Převzetí kontroly = přímé ovládání těchto vstupů, jako by je ovládala sama řídicí jednotka.
+- **Skříň (`POWER_CABINET`):** sepnutí přepne napájení (`is_on = not is_on`), `DeviceToggled`.
+- **Plošina + `BUTTON`:** jednorázový přejezd do druhé polohy.
+- **Plošina + `SWITCH`:** plošina jezdí střídavě do polohy A i B (přepínač).
+- **Čerpadlo + `BUTTON`:** jednorázové přečerpání předem daným směrem (`default_direction`).
+- **Čerpadlo + `SWITCH`:** přečerpává střídavě jedním i druhým směrem. Jedno sepnutí = jeden přenos **a** prohození zdrojové a cílové nádrže (`current_direction`), obojí najednou. Prohození je ale **důsledek provedeného přenosu**, ne samostatná akce: nesplní-li se podmínky `pump_can_transfer` (prázdný zdroj, málo místa v cíli, hrozící utonutí, skříň bez napětí), nepřečerpá se nic, směr zůstane a akce se odmítne — odmítnutý příkaz nesmí měnit stav (P5). U jednosměrného čerpadla (`bidirectional == false`) se přepínač chová jako tlačítko.
 
-**Výjimka z dělení validace/aplikace ([§6.2](#62-průběh-příkazu)).** Jestli `DEVICE_INPUT` něco udělá, závisí na stavu plošin a čerpadel napojených na ovládané zařízení, takže se to pozná až v aplikační fázi. `device_input` proto každou dílčí akci sám validuje **před** jejím provedením a vrátí neúspěch, jen když neproběhla ani jedna — v tom případě se stav nezměnil a `submit_command` hlásí `CommandRejected` jako u kteréhokoli jiného odmítnutého příkazu (P5). Nesmí nastat, aby se příkaz tvářil jako přijatý, i když se nic nestalo.
+Jestli sepnutí něco udělá, závisí na stavu plošin a čerpadel napojených na zařízení. Validace akce 1 se proto ptá `DeviceSystem.device_input_validate` — čisté kontroly `platform_can_move` / `pump_can_transfer` ve stejném pořadí, v jakém pak `device_input` jednotlivé přejezdy a přenosy provádí. Neprojde-li ani jedna, je akce `CommandRejected` a stav se nezmění (P5). Protože validace nic nemutuje, je první úspěšná položka v aplikační fázi táž jako ve validační — přijatá akce tedy vždy něco udělá. Dřív bylo sepnutí zvláštní **výjimkou z dělení validace/aplikace** ([§6.2](#62-průběh-příkazu)); po zrušení režimu ovládání už výjimka není potřeba a `_apply` nemá návratovou hodnotu.
 
 ### 13.2 Transportní plošiny
 
@@ -1673,7 +1662,7 @@ Díry, které vyplavaly až při přepisu pravidel do kódu ([§21](#21-jak-je-t
 | O5 | **Konec skluzu o překážku.** Design dokument §2.1.4 říká, že robot klouže „než narazí na překážku"; §7.3 popisuje jen konec na jiném povrchu a `FAIL` nad propastí. | Přidána větev „konec skluzu o překážku": je-li vpředu neprůchodná buňka, nashromážděná fronta se provede a robot zastaví na ledu. |
 | O6 | **Splynutí nádrží za běhu.** Han může vykopat příčku mezi dvěma nádržemi. Formát i čerpadla odkazují na nádrž indexem. | Voda se slije do nádrže s nižším indexem, druhá zůstane prázdná. Chování není v žádném dokumentu. |
 | O7 | ~~**Spouštění automatiky.** „Jakmile je limit splněn" nedefinuje, jestli se plošina hýbe opakovaně každý tah.~~ **Vyřešeno** — design dokument §2.2.1: náběžná hrana u plošiny i čerpadla; u čerpadla je podmínkou celý přenos (napájení, voda ve zdroji, místo v cíli, bezpečná hladina). | Náběžná hrana (`trigger_latched`) u plošin i čerpadel. |
-| O8 | **Napájení elektrické skříně.** `is_on` má stav, ale žádné pravidlo neříká, co ho mění. | Skříň bez poruchy startuje zapnutá; `DEVICE_INPUT` na přímo ovládanou skříň napájení přepíná. |
+| O8 | **Napájení elektrické skříně.** `is_on` má stav, ale žádné pravidlo neříká, co ho mění. | Skříň bez poruchy startuje zapnutá; Akce 1 Ila u funkční skříně napájení přepíná ([§13.1](#131-zařízení)). |
 | O11 | ~~**Zařízení na plošině.** Zařízení je zeď plus odkaz souřadnicí ([§13.1](#131-zařízení)); `move_platform` posouvá jen blok, takže by se zařízení „odtrhlo" od své zdi.~~ **Vyřešeno** — design dokument §2.2.1: zařízení v kostce plošiny je její pevnou součástí a jede s ní. | `move_platform` posouvá i `DeviceState.cell` ([§13.2](#132-transportní-plošiny)). |
 | O9 | **Okraj levelu vůči vodě.** [§4](#4-souřadný-systém-a-konvence-mřížky) říká, že okraj se chová jako plná zeď; [§9.1](#91-identifikace-nádrží) říká, že dutina dotýkající se okraje není nádrž. | Pro pohyb je okraj zeď, pro vodu díra — nádrž musí mít vlastní dno i stěny. |
 | O12 | **Šplhání Neta ze šikminy.** Krok na šikminu musí pokračovat dalším dílčím krokem ([O2](#207-otevřené-otázky-z-implementace)). Design dokument neříká, jestli tím pokračováním smí být Netovo vyšplhání po stěně za šikminou (resp. sešplhání do propasti za ní). | Zatím ne — obě šplhací větve jsou gatované `mode_in [""]`, takže Net na šikminu, za kterou je jen stěna nebo propast, nevstoupí. Konzervativní volba: nedomýšlet pravidlo, které v design dokumentu není. |

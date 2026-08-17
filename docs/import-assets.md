@@ -242,7 +242,7 @@ Jedna věc navíc: **nesený předmět**. Dnes se předmět po sebrání jen př
 
 ### 4.3 Zařízení a plošiny
 
-Zařízení mají stav (`is_broken`, `is_on`, kdo je ovládá — [§13.1](technical-design.md#131-zařízení)), takže potřebují vlastní uzel s materiálem reagujícím na stav (kontrolka), ne `MultiMesh`. Plošina je sada buněk, které se hýbou jako celek ([devices.gd:109](../game/core/sim/devices.gd#L109)) — jeden uzel s modelem plošiny, kterým se posouvá při `PLATFORM_MOVED`.
+Zařízení mají stav (`is_broken`, `is_on` — [§13.1](technical-design.md#131-zařízení)), takže potřebují vlastní uzel s materiálem reagujícím na stav (kontrolka), ne `MultiMesh`. Plošina je sada buněk, které se hýbou jako celek ([devices.gd:109](../game/core/sim/devices.gd#L109)) — jeden uzel s modelem plošiny, kterým se posouvá při `PLATFORM_MOVED`.
 
 ### 4.4 Voda
 
@@ -409,7 +409,7 @@ Návrh, jak co hrát. Sloupec „blokuje“ říká, jestli událost spotřebuje
 | `ITEM_DROPPED` | opačně | ano |
 | `TARGET_UNLOCKED` | cíl se rozsvítí | ne |
 | `DEVICE_REPAIRED` | kontrolka naskočí | ne |
-| `DEVICE_CONTROL_TAKEN` / `_RELEASED` | spojnice robot–zařízení, změna kontrolky | ne |
+| `DEVICE_TOGGLED` | přepnutí napájení skříně — změna kontrolky / polohy páky | ne |
 | `PUMP_TRANSFERRED` | běh čerpadla; hladiny řeší `WATER_VOLUME_CHANGED` | ne |
 | `COMMAND_REJECTED` | krátký „náraz“ robota + zvuk, žádný posun | ano |
 | `LEVEL_COMPLETED` | závěrečná sekvence / návrat na mapu světa ([§7.3](#73-mapa-světa-overworld)) | ano |

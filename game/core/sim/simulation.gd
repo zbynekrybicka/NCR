@@ -43,7 +43,7 @@ func _build_action_table() -> void:
 		GridTypes.RobotKind.NET: DropItem.new(),
 		GridTypes.RobotKind.DA: DaDrop.new(),
 		GridTypes.RobotKind.YEO: DropItem.new(GridTypes.ItemType.FUEL),
-		GridTypes.RobotKind.IL: IlReleaseOrDrop.new(),
+		GridTypes.RobotKind.IL: DropItem.new(GridTypes.ItemType.SERVICE_KIT),
 	}
 
 # ── Vstupní bod ────────────────────────────────────────────────────────────
@@ -64,12 +64,7 @@ func submit_command(command: Command) -> Command.Result:
 	if not validation.ok:
 		return _reject(command, validation.reason)
 
-	# Vstup do ovládaného zařízení se dá vyhodnotit až v aplikační fázi (závisí
-	# na stavu plošin a čerpadel). Když se nic nestalo, je to odmítnutý příkaz
-	# jako každý jiný — nic se nezměnilo, takže se nesmí hlásit jako přijatý (P5).
-	var apply_error := _apply(command, robot_index, validation, result.events)
-	if apply_error != "":
-		return _reject(command, apply_error)
+	_apply(command, robot_index, validation, result.events)
 	_settle(result.events)
 	_check_invariants()
 	_check_postconditions(result.events)
@@ -104,11 +99,6 @@ func _validate(command: Command, robot_index: int) -> Validation:
 			return _validate_switch(next_robot_in_sequence(), robot_index)
 		Command.CommandType.SWITCH_ROBOT_TO:
 			return _validate_switch(command.target_index, robot_index)
-		Command.CommandType.DEVICE_INPUT:
-			var robot: RobotState = world.robots[robot_index]
-			if robot.controlling_device == -1:
-				return Validation.reject("robot neovládá žádné zařízení")
-			return Validation.accept({})
 	return Validation.reject("neznámý příkaz")
 
 func _validate_action(table: Dictionary, robot_index: int, label: String) -> Validation:
@@ -161,8 +151,8 @@ func _validate_switch(target_index: int, current_index: int) -> Validation:
 		return Validation.reject("aktivní robot není v bezpečí — Da musí přistát")
 	return Validation.accept({"target": target_index})
 
-## §10 — jediný skutečný případ je Da ve vzduchu. Il si podrží ovládané
-## zařízení přes přepnutí a Net nikdy nezůstává v mezistavu šplhání.
+## §10 — jediný skutečný případ je Da ve vzduchu. Il sepíná zařízení
+## jednorázově a Net nikdy nezůstává v mezistavu šplhání.
 func is_safe_to_leave(robot_index: int) -> bool:
 	var robot: RobotState = world.robots[robot_index]
 	if robot.kind != GridTypes.RobotKind.DA:
@@ -171,10 +161,10 @@ func is_safe_to_leave(robot_index: int) -> bool:
 
 # ── 2. Aplikace ────────────────────────────────────────────────────────────
 
-## Vrátí prázdný řetězec, když se příkaz provedl; jinak důvod, proč se
-## neprovedl (jen DEVICE_INPUT — ostatní příkazy rozhoduje validace).
+## O tom, jestli se příkaz provede, rozhoduje výhradně validace — aplikace
+## už jen mutuje stav a sbírá události.
 func _apply(command: Command, robot_index: int, validation: Validation,
-		out_events: Array) -> String:
+		out_events: Array) -> void:
 	var robot: RobotState = world.robots[robot_index]
 	match command.type:
 		Command.CommandType.TURN_LEFT:
@@ -203,11 +193,6 @@ func _apply(command: Command, robot_index: int, validation: Validation,
 			action_2.apply(world, robot_index, validation, out_events)
 		Command.CommandType.SWITCH_ROBOT_NEXT, Command.CommandType.SWITCH_ROBOT_TO:
 			_set_active_robot(validation.data["target"], out_events)
-		Command.CommandType.DEVICE_INPUT:
-			var device_validation := DeviceSystem.device_input(world, robot_index, out_events)
-			if not device_validation.ok:
-				return device_validation.reason
-	return ""
 
 func _turn(robot_index: int, new_facing: int, out_events: Array) -> void:
 	var robot: RobotState = world.robots[robot_index]
