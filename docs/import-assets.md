@@ -453,6 +453,24 @@ Jakmile bude klipů víc než pár, přejdi z ručního `AnimationPlayer.play()`
 
 Mimo rozsah tohoto dokumentu, ale platí to samé: zvuk se věší na **tytéž události**, ideálně druhou tabulkou vedle `AnimTiming`. Nedělej zvuk uvnitř animačních klipů — po roztažení `speed_scale` by se rozešel.
 
+### 6.9 Klipy, které už existují
+
+Podle doporučení z [§6.3](#63-klip-vs-tabulka-kdo-určuje-délku) si tady drž **přirozenou délku** každého klipu, aby se dalo spočítat, jak daleko od 1.0 skončí `speed_scale`. Klipy vznikají v Blenderu ([blender/README.md](../blender/README.md), sekce Animace) a jedou s modelem v `.glb`.
+
+| Robot | Klip | Přirozená délka | Událost | `speed_scale` při tabulkovém tempu |
+|---|---|---:|---|---:|
+| Da | `rotors` | 0.40 s (smyčka) | žádná — běží pořád | 1.0, neroztahuje se |
+| Net | `walk` | 0.80 s | `ROBOT_MOVED`, `substep = FORWARD` (0.55 s) | 1.45 |
+| Net | `turn_left` / `turn_right` | 0.67 s | `ROBOT_TURNED` o 90° (0.35 s) | 1.90 |
+| Net | `turn_around` | 1.00 s | `ROBOT_TURNED` o 180° | podle tabulky |
+
+Dvě věci, které z toho plynou:
+
+1. **`rotors` se nesmí roztahovat.** Je to smyčka a trvalý jev, takže nepatří do fronty událostí — patří do vlastní stopy `AnimationPlayer`u (nebo do vlastní vrstvy `AnimationTree`), která běží nezávisle na tom, co robot zrovna dělá. Kdyby ji `_play_clip()` roztáhlo podle délky kroku, vrtule by při každém příkazu změnily otáčky.
+2. **Netovy klipy mají `speed_scale` kolem 1.5–1.9.** To je ještě v pásmu, kde to vypadá dobře (§6.3 varuje až před 0.3 a 3.0), ale je to signál: až se doladí cílové tempo hry (otevřená otázka V4), buď se posunou hodnoty v `AnimTiming`, nebo se klipy reexportují v jiné délce. Délka klipu je v Blenderu jedno číslo v `*_spec.py` (`WALK_FRAMES`, `TURN_FRAMES`), reexport je tedy levný.
+
+Netova chůze je stavěná tak, že **chodidla stojících nohou drží zem** — uvnitř klipu couvají přesně o tu buňku, o kterou uzel popojede. Když se změní `AnimTiming`, tenhle vztah zůstane platit, protože klip i posun uzlu se roztahují stejným číslem. Co ho ale rozbije, je posun uzlu jinou křivkou než lineární: klip počítá s rovnoměrnou jízdou z buňky do buňky. Pokud se do `EventAnimator` přidá easing, musí se stejný easing přidat i do klipu (v `anim_walk.py` je to jediná funkce `_walk_motion`).
+
 ---
 
 ## 7. Prostředí: krajina, biotopy, umístění levelů

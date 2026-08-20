@@ -6,3 +6,7 @@ export_presets.cfg
 # OS
 .DS_Store
 Thumbs.db
+
+# Python (bpy skripty v blender/)
+__pycache__/
+*.pyc
