@@ -72,7 +72,7 @@ game/
 | Formát | glTF 2.0 binární (`.glb`) | jeden soubor včetně textur, Godot ho čte nativně |
 | Měřítko | **1 metr v Blenderu = 1 buňka mřížky** | `CELL_SIZE = 1.0` ([§4](technical-design.md#4-souřadný-systém-a-konvence-mřížky)) |
 | Osy | v exportéru nech `+Y up` (výchozí) | Godot je Y-up; Blender Z-up se převede automaticky |
-| Předek modelu | v Blenderu směřuje k **−Y** | po převodu z toho bude −Z = `Direction.NORTH` ([§4](technical-design.md#4-souřadný-systém-a-konvence-mřížky)) |
+| Předek modelu | v Blenderu směřuje k **−Y**, při exportu se kořen otočí o 180° | výsledný `.glb` míří předkem na −Z = `Direction.NORTH` ([§4](technical-design.md#4-souřadný-systém-a-konvence-mřížky)) — viz [§2.5](#25-proč-se-při-exportu-otáčí-kořen) |
 | Transformace | před exportem *Apply* na rotaci i měřítko | jinak se objeví dvojitá rotace v Godotu |
 | Materiály | jeden materiál na model, přiřazený na mesh data | podmínka pro `MultiMesh` (viz [§3](#3-modely-bloků-model_id-a-knihovna-modelů)) |
 | Modifikátory | aplikované (nebo „Export → Apply Modifiers“) | Godot je nezná |
@@ -91,6 +91,29 @@ Tohle je nejčastější zdroj posunutých modelů, proto explicitně. `WorldVie
 Bloků je ve scéně nejvíc a jedou přes `MultiMeshInstance3D` — u nich se vyplatí držet nízký počet trojúhelníků a jeden materiál. Roboti (max. 7 na scéně) si můžou dovolit podstatně víc.
 
 **Každý model má fallback.** Knihovna modelů vrací `null`, když asset chybí, a `WorldView` v tom případě použije dosavadní barevnou krychli / primitivum. Díky tomu můžou assety přicházet po jednom a hra je hratelná v každém okamžiku — což je stejný postup po malých krocích jako u pravidel.
+
+### 2.5 Proč se při exportu otáčí kořen
+
+Tohle je past, která se **na renderu ani na obálce nepozná** — pozná se až ve hře tím, že robot couvá. Původní znění [§2.2](#22-export-z-blenderu) slibovalo, že blenderové −Y samo od sebe skončí na −Z. Nekončí:
+
+| | předek | proč |
+|---|---|---|
+| Blender | −Y | pohled *Front* (Numpad 1) se dívá po +Y |
+| glTF 2.0 | **+Z** | spec: *„the front of a glTF asset faces +Z“* — exportér tedy mapuje −Y na +Z |
+| Godot | −Z | `Node3D` se dívá po −Z, `Direction.NORTH` je `(0, 0, -1)` |
+
+Model postavený podle konvence by proto v Godotu mířil přesně naopak. Řeší to `ncr_common.godot_forward()` — kontext, který před exportem otočí **jen kořenový Empty** o 180° a po exportu ho vrátí zpátky:
+
+```python
+with nc.godot_forward("DUL_Root"):
+    bpy.ops.export_scene.gltf(**options)
+```
+
+Díly ani klipy o té otočce nevědí (jsou to potomci kořene) a v `.glb` z ní zůstane jediný kvaternion na kořenovém uzlu. Ve hře pak není potřeba žádná korekce — což je smysl celého [§2.3](#23-kam-patří-počátek-souřadnic-origin): uzel se postaví na střed buňky, dostane `facing_to_yaw()` a tím to končí.
+
+**Kontrola, která to odhalí** (a kterou nejde udělat okem): najít v `.glb` uzel, o kterém se ví, že je vpředu, a podívat se na znaménko jeho `z`. U Dula je to `DUL_Intake` — sání patří na příď, takže musí vyjít **záporně**.
+
+---
 
 ---
 
@@ -222,17 +245,19 @@ RobotView (Node3D)          ← tímhle hýbe EventAnimator (pozice buňky, yaw)
     └── AnimationPlayer     ← klipy: idle, walk, turn, dig, climb…
 ```
 
-Díky obalu se animace uvnitř modelu (přešlapování, otáčení vrtulí Da) míchá s pohybem po mřížce, aniž by o sobě věděly. „Nos“ ukazující směr ([world_view.gd:110](../game/app/view/world_view.gd#L110)) se s reálným modelem zruší — model má vlastní předek.
+Díky obalu se animace uvnitř modelu (přešlapování, otáčení vrtulí Da) míchá s pohybem po mřížce, aniž by o sobě věděly. „Nos“ ukazující směr se s reálným modelem zrušil — model má vlastní předek.
 
-Tabulka modelů vedle stávajících `ROBOT_COLORS`:
+**Hotovo** v [`app/view/robot_view.gd`](../game/app/view/robot_view.gd): tabulka `MODEL_PATHS` (cesta na `RobotKind`), cache načtených scén, a když model chybí, postaví se dosavadní barevná krychle s nosem. Barva se předává parametrem, aby `RobotView` nemusel sahat do `WorldView` — totéž `RobotView` totiž používá i editor, aby autor levelu viděl to co hráč.
 
 ```gdscript
-const ROBOT_MODELS := {
+const MODEL_PATHS := {
 	GridTypes.RobotKind.HAN: "res://assets/robots/han.glb",
 	GridTypes.RobotKind.DUL: "res://assets/robots/dul.glb",
 	# … a tak dál; chybějící klíč nebo neexistující soubor → barevná krychle
 }
 ```
+
+Smyčkový klip (`rotors` u Da, do budoucna `idle`) se pouští hned při stavbě uzlu a `loop_mode` se mu nastavuje **v kódu**: v `.glb` žádný příznak opakování není a ruční nastavení v `.import` by se při reexportu modelu ztratilo.
 
 ### 4.2 Předměty a klíč
 
@@ -599,9 +624,9 @@ Stejná logika jako [§20.4 technického designu](technical-design.md#204-rozpis
 |---|---|---|---|:--:|
 | A1 | `assets/` dle [§2.1](#21-kam-co-patří), konvence exportu, první testovací blok (`WALL`) | ve hře je zeď jako model, všechno ostatní stále placeholder | [§2](#2-adresáře-export-z-blenderu-konvence) | ☐ |
 | A2 | `app/view/model_library.gd`, `WorldView` vykresluje podle `model_id` **a orientace** | šikmina v levelu míří tam, kam se po ní dá vyjít; editor i hra shodně | [§3](#3-modely-bloků-model_id-a-knihovna-modelů) | ☐ |
-| A3 | `app/view/robot_view.gd`, modely robotů s fallbackem, `idle` | 7 robotů má model nebo krychli, nic se nerozbije při chybějícím GLB | [§4.1](#41-struktura-uzlu-robota) | ☐ |
+| A3 | `app/view/robot_view.gd`, modely robotů s fallbackem, `idle` | 7 robotů má model nebo krychli, nic se nerozbije při chybějícím GLB | [§4.1](#41-struktura-uzlu-robota) | ☑ |
 | A4 | `app/view/anim_timing.gd` — časy a `speed_scale` z animátoru na jedno místo, včetně kamery | `speed_scale = 3.0` zpomalí hru a **nezmění** průchod levelem | [§6.2](#62-časy-na-jedno-místo) | ☐ |
-| A5 | klipy chůze/otáčení napojené na `ROBOT_MOVED` / `ROBOT_TURNED` podle `substep` | krok po šikmině vypadá jinak než rovný; přeskočení nechá scénu v koncové póze | [§6.3](#63-klip-vs-tabulka-kdo-určuje-délku), [§6.4](#64-mapa-událostí-na-animace) | ☐ |
+| A5 | klipy chůze/otáčení napojené na `ROBOT_MOVED` / `ROBOT_TURNED` podle `substep` | krok po šikmině vypadá jinak než rovný; přeskočení nechá scénu v koncové póze | [§6.3](#63-klip-vs-tabulka-kdo-určuje-délku), [§6.4](#64-mapa-událostí-na-animace) | ◐ |
 | A6 | **`ROBOT_ACTED` v `core/sim/events.gd`** + úprava akcí, testů a [§6.3 TD](technical-design.md#63-události) | scénářové testy prochází s novou událostí; commit odděleně od assetů | [§6.5](#65-chybějící-událost-akce-robota) | ☐ |
 | A7 | animace akcí (kopání, vysypání, pálení, mrazení, čerpání) | každá akce má klip a definovanou koncovou pózu | A6 | ☐ |
 | A8 | souběžné události + dočasné uzly pro `BLOCK_FELL`, `PLATFORM_MOVED` | blok viditelně padá, plošina veze roboty, fronta se nezasekne | [§6.6](#66-souběh-fronta-a-dočasné-uzly) | ☐ |
@@ -612,6 +637,10 @@ Stejná logika jako [§20.4 technického designu](technical-design.md#204-rozpis
 | A13 | kulisa levelu — biotopová scéna, světlo mimo `WorldView` | level stojí v krajině, okraj čte jako neprůchodný | [§7.2](#72-kulisa-kolem-levelu) | ☐ |
 | A14 | `campaign/campaign.json`, `app/world_map/` | z mapy jde spustit level a po dokončení se vrátit zpátky | [§7.3](#73-mapa-světa-overworld) | ☐ |
 | A15 | biotopové varianty bloků (`model_id == 0` → biotop) | tentýž level vypadá v poušti jinak než na louce | [§7.4](#74-biotopy) | ☐ |
+
+☑ hotovo · ◐ rozděláno · ☐ nezapočato.
+
+**A5 je rozdělané záměrně:** `EventAnimator` už vybírá klip podle `substep` a podle směru otáčky a předává ho `RobotView.play_action()`, který ho roztahuje na dobu události. Chybí ale **A4** — při ladícím tempu (`STEP_TIME = 0.14 s`) vyjde Netově chůzi `speed_scale` kolem 5.7, tedy hluboko za hranicí 3.0, před kterou varuje [§6.3](#63-klip-vs-tabulka-kdo-určuje-délku). Nohy se doženou správného tempa až tím, že se časy přesunou do `anim_timing.gd` a doladit se musí dohromady s otevřenou otázkou V4. Klipy pro šikminu a šplání zatím neexistují — modely je nemají, takže se uzel prostě posune (`play_action` chybějící klip tiše přejde).
 
 **Kde se to nejspíš zadrhne:**
 

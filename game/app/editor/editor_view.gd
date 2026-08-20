@@ -127,24 +127,14 @@ func _build_blocks() -> void:
 		node.rotation.y = -WorldView.facing_to_yaw(level.orientation_at(cell))
 		_content.add_child(node)
 
+## Roboti se v editoru kreslí stejně jako ve hře (týž RobotView), aby autor
+## levelu viděl, co pak uvidí hráč — navíc jen jmenovka nad modelem.
 func _build_robots() -> void:
 	for placement in level.robots:
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.6, 0.6, 0.6)
-		var material := StandardMaterial3D.new()
-		material.albedo_color = WorldView.ROBOT_COLORS.get(placement.kind, Color.WHITE)
-		mesh.material = material
-		var node := MeshInstance3D.new()
-		node.mesh = mesh
+		var node := RobotView.create(placement.kind,
+				WorldView.ROBOT_COLORS.get(placement.kind, Color.WHITE))
 		node.position = WorldView.cell_to_position(placement.cell)
 		node.rotation.y = WorldView.facing_to_yaw(placement.facing)
-		var nose := MeshInstance3D.new()
-		var nose_mesh := BoxMesh.new()
-		nose_mesh.size = Vector3(0.15, 0.15, 0.3)
-		nose_mesh.material = material
-		nose.mesh = nose_mesh
-		nose.position = Vector3(0, 0, -0.4)
-		node.add_child(nose)
 		var label := Label3D.new()
 		label.text = GridTypes.robot_name(placement.kind)
 		label.position = Vector3(0, 0.55, 0)

@@ -28,7 +28,7 @@ Podrobnosti v [Animace](#animace) níž a v README obou robotů.
 ## Společné pro všechny
 
 **Konvence souřadnic** (podle [import-assets.md §2.2–2.3](../docs/import-assets.md),
-aby export do glTF nepotřeboval žádnou dodatečnou rotaci):
+aby model ve hře nepotřeboval žádnou dodatečnou transformaci):
 
 ```
 1 buňka mřížky = 1.0 Blender unit
@@ -36,6 +36,17 @@ origin modelu  = střed buňky, model se vejde do [-0.5, 0.5]^3
 podlaha buňky  = z = -0.5      (robot na ní stojí)
 předek robota  = -Y
 ```
+
+**Export do hry** dělá `export_glb()` v `build_*.py` (standardně vypnutý
+přepínačem `EXPORT_GLB`) a píše do `game/assets/robots/`. Všechny modely
+najednou přepošle [`export_all.py`](export_all.py):
+
+```
+blender --background --factory-startup --python blender/export_all.py
+``` Pozor na jednu věc,
+kterou z modelu nepoznáš: **glTF má předek na +Z, Godot na −Z**, takže se
+kořen musí před zápisem otočit — dělá to `nc.godot_forward("HAN_Root")`,
+podrobně v [import-assets.md §2.5](../docs/import-assets.md).
 
 Rozměry se v `*_spec.py` píšou v čitelném rámci `fwd / right / up`
 (kde `up = 0` je podlaha) a překládá je `ncr_common.p()`.
@@ -101,6 +112,11 @@ chodidlo minulo cíl a jestli stojící noha neprokluzuje — obojí má být
 Seznam pastí je na konci každého README. Tyhle platí pro všechny
 a stojí za zopakování:
 
+- **Předek se při exportu musí otočit.** „Stavím přídí k −Y, takže v Godotu
+  bude mířit na −Z“ je past: mezi tím je glTF, které má předek na +Z. Bez
+  `nc.godot_forward()` robot ve hře couvá — a na renderu ani na kontrole
+  obálky to vidět není. Ověřit se to dá jedině v `.glb`: uzel, který patří
+  dopředu (`DUL_Intake`), tam musí mít záporné `z`.
 - **Skryté objekty depsgraph nevyhodnocuje** — mají zastaralou
   `matrix_world` i `bound_box`.
 - **`bound_box` je lokální osově zarovnaný kvádr**, takže u otočeného

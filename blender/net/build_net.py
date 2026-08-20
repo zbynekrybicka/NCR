@@ -255,7 +255,9 @@ def export_glb(path=None):
     anim = _ncr_import("ncr_anim")
     options.update(anim.gltf_animation_options())
 
-    bpy.ops.export_scene.gltf(**options)
+    # otočka kořene: glTF má předek na +Z, Godot na -Z (ncr_common)
+    with nc.godot_forward("NET_Root"):
+        bpy.ops.export_scene.gltf(**options)
     print("[NCR] export: %s" % path)
     return path
 

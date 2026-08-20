@@ -34,7 +34,7 @@ const WATER_COLOR_DEEP := Color(0.2, 0.45, 0.95, 0.35)
 
 var world: WorldState
 var _block_layers: Dictionary = {}   # BlockType -> MultiMeshInstance3D
-var _robot_nodes: Array = []         # index robota -> Node3D
+var _robot_nodes: Array = []         # index robota -> RobotView
 var _item_nodes: Dictionary = {}     # Vector3i -> Node3D
 var _key_node: Node3D
 var _water_root: Node3D
@@ -137,24 +137,11 @@ func _add_water_box(cell: Vector3i, color: Color) -> void:
 func _build_robots() -> void:
 	for i in world.robots.size():
 		var robot: RobotState = world.robots[i]
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.6, 0.6, 0.6)
-		var material := StandardMaterial3D.new()
-		material.albedo_color = ROBOT_COLORS.get(robot.kind, Color.WHITE)
-		mesh.material = material
-		var node := MeshInstance3D.new()
-		node.mesh = mesh
+		var node := RobotView.create(robot.kind,
+				ROBOT_COLORS.get(robot.kind, Color.WHITE))
 		node.position = cell_to_position(robot.cell)
-		add_child(node)
-		# Malý „nos" ukazující směr pohledu
-		var nose := MeshInstance3D.new()
-		var nose_mesh := BoxMesh.new()
-		nose_mesh.size = Vector3(0.15, 0.15, 0.3)
-		nose_mesh.material = material
-		nose.mesh = nose_mesh
-		nose.position = Vector3(0, 0, -0.4)
-		node.add_child(nose)
 		node.rotation.y = facing_to_yaw(robot.facing)
+		add_child(node)
 		_robot_nodes.append(node)
 
 static func facing_to_yaw(facing: int) -> float:
@@ -207,3 +194,7 @@ func robot_node(index: int) -> Node3D:
 	if index < 0 or index >= _robot_nodes.size():
 		return null
 	return _robot_nodes[index]
+
+## Totéž, jen typovaně — pro animace uvnitř modelu (import-assets §4.1).
+func robot_view(index: int) -> RobotView:
+	return robot_node(index) as RobotView

@@ -251,9 +251,11 @@ def export_glb(path=None):
         o.select_set(True)
     bpy.context.view_layer.objects.active = targets[0] if targets else None
 
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB',
-                              use_selection=True, export_yup=True,
-                              export_apply=True)
+    # otočka kořene: glTF má předek na +Z, Godot na -Z (ncr_common)
+    with nc.godot_forward("HAN_Root"):
+        bpy.ops.export_scene.gltf(filepath=path, export_format='GLB',
+                                  use_selection=True, export_yup=True,
+                                  export_apply=True)
     print("[NCR] export: %s" % path)
     return path
 

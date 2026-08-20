@@ -791,3 +791,40 @@ def decal_text(name, body, target, center, direction, size=0.085, thickness=0.00
         set_material(txt, material)
     set_origin(txt, center)
     return txt
+
+
+# ---------------------------------------------------------------------------
+# Export do hry
+# ---------------------------------------------------------------------------
+
+class godot_forward(object):
+    """Kontext, ve kterém kořen modelu míří tam, kam Godot čeká předek.
+
+    Modely se staví přídí k -Y (viz Konvence nahoře). glTF ale definuje
+    předek na +Z a exportér mapuje blenderové -Y právě tam, kdežto v Godotu
+    je předek -Z (`GridTypes.Direction.NORTH`). Bez téhle otočky by roboti
+    ve hře couvali — a nebylo by to poznat na obálce ani na renderu, jen
+    ve hře. Ověřeno 2026-08-20 na poloze DUL_Intake v .glb.
+
+    Otáčí se jen kořenový Empty, takže díly ani klipy o tom nevědí:
+
+        with nc.godot_forward("DUL_Root"):
+            bpy.ops.export_scene.gltf(**options)
+    """
+
+    def __init__(self, root_name):
+        self.root = bpy.data.objects.get(root_name)
+        self.before = 0.0
+
+    def __enter__(self):
+        if self.root is not None:
+            self.before = self.root.rotation_euler.z
+            self.root.rotation_euler.z = self.before + pi
+            bpy.context.view_layer.update()
+        return self
+
+    def __exit__(self, *exc_info):
+        if self.root is not None:
+            self.root.rotation_euler.z = self.before
+            bpy.context.view_layer.update()
+        return False
