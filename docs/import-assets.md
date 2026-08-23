@@ -393,7 +393,12 @@ static func duration(event: Event) -> float:
 	return base * speed_scale
 ```
 
-Do stejného souboru patří i `CameraRig.FOLLOW_SPEED` ([camera_rig.gd:11](../game/app/camera/camera_rig.gd#L11)) — když se roboti zpomalí čtyřikrát a kamera ne, kamera dojede na cíl dřív, než robot dojde, a scéna vypadá roztrhaně. Tempo hry patří na jedno místo.
+`CameraRig` žádnou vlastní rychlost nemá a mít nemusí — cíl orbitu čte každý
+snímek přímo z `global_position` sledovaného robota
+([camera_rig.gd](../game/app/camera/camera_rig.gd)), takže kopíruje tu samou
+křivku, kterou robotu kreslí `EventAnimator`. Změna tempa hry (tabulka výše)
+se tím pádem projeví na kameře automaticky, bez rizika rozjetí dvou
+nezávislých konstant.
 
 ### 6.3 Klip vs. tabulka: kdo určuje délku
 
@@ -578,6 +583,8 @@ Alternativa, kterou formát dovoluje: přidat do `.ncr` chunk `BIOM` s názvem b
 
 **Postup hráče** (které levely jsou odemčené) je podle [§20.1](technical-design.md#201-rozsah-verze-010) mimo rozsah 0.1.0. Až přijde, půjde do `user://progress.json` — tedy do uživatelských dat, ne do katalogu. Pole `requires` v katalogu jen popisuje graf závislostí; co je splněno, je běhová informace.
 
+**Rozdělaný první krok: umístění v editoru.** Krajina z `blender/krajina/` je dovezená jako `assets/world_map/krajina.glb` a editor má nástroj „Umístit ve světě…“ ([`app/editor/world_placement_controller.gd`](../game/app/editor/world_placement_controller.gd) + `world_placement_view.gd`/`_camera.gd`/`_ui.gd`) — vlastní volná kamera nad celou krajinou, klik umístí značku rovnou na povrch (raycast = vertikální snap sám o sobě), tlačítko „Snapnout na povrch“ dorovná Y i po ručním zadání X/Z. Zapisuje se to ale zatím jen do `user://campaign_map.json` přes [`CampaignMap`](../game/campaign/campaign_map.gd) — autorova pracovní evidence ve stejném duchu jako `user://levels` u samotných levelů, **ne** hotový `res://campaign/campaign.json` katalog popsaný výše. Kolize krajiny, kterou si na to nástroj staví, je čistě editorová (raycast), ne herní — kolize s jednotlivými objekty krajiny (stromy, keře…) záměrně neřeší. Zbytek §7.3 (`WorldMap` scéna, markery, `res://campaign/campaign.json`, průchod `MainMenu → WorldMap → level`) zůstává neudělaný (A14 níže).
+
 **Tok obrazovkami:**
 
 ```
@@ -635,7 +642,7 @@ Stejná logika jako [§20.4 technického designu](technical-design.md#204-rozpis
 | A11 | `assets/ui/theme.tres` + ikony v editoru a HUD | UI má jednotný vzhled, tlačítka bez ikony nepadají | [§5](#5-2d-obrázky-a-ui) | ☐ |
 | A12 | HUD s panelem robotů dle design dokumentu | přepnutí robota klikem, stav inventáře a klíče je vidět bez čtení textu | [§5.3](#53-hud) | ☐ |
 | A13 | kulisa levelu — biotopová scéna, světlo mimo `WorldView` | level stojí v krajině, okraj čte jako neprůchodný | [§7.2](#72-kulisa-kolem-levelu) | ☐ |
-| A14 | `campaign/campaign.json`, `app/world_map/` | z mapy jde spustit level a po dokončení se vrátit zpátky | [§7.3](#73-mapa-světa-overworld) | ☐ |
+| A14 | `campaign/campaign.json`, `app/world_map/` | z mapy jde spustit level a po dokončení se vrátit zpátky | [§7.3](#73-mapa-světa-overworld) | ◐ |
 | A15 | biotopové varianty bloků (`model_id == 0` → biotop) | tentýž level vypadá v poušti jinak než na louce | [§7.4](#74-biotopy) | ☐ |
 
 ☑ hotovo · ◐ rozděláno · ☐ nezapočato.

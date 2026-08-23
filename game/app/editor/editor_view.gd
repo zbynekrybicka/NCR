@@ -58,9 +58,7 @@ func set_cursor(cell, valid: bool) -> void:
 	material.albedo_color = Color(0.3, 1.0, 0.3, 0.35) if valid else Color(1.0, 0.3, 0.3, 0.35)
 
 func _add_light() -> void:
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-55, -35, 0)
-	add_child(light)
+	WorldView.add_sun_and_sky(self)
 
 func _build_cursor() -> void:
 	var mesh := BoxMesh.new()

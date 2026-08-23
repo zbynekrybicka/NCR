@@ -18,6 +18,7 @@ signal load_requested(path: String)
 signal new_level_requested(size: Vector3i)
 signal play_pressed
 signal menu_pressed
+signal world_placement_requested
 
 # Mechanismy (§13): zařízení, nádrže, plošiny, čerpadla.
 signal device_tool_selected(kind: int)
@@ -136,6 +137,7 @@ func _make_top_bar() -> Control:
 	_add_button(bar, "Zpět (Ctrl+Z)", func(): undo_pressed.emit())
 	_add_button(bar, "Znovu (Ctrl+Y)", func(): redo_pressed.emit())
 	_add_button(bar, "Otočit (R)", func(): rotate_pressed.emit())
+	_add_button(bar, "Umístit ve světě…", func(): world_placement_requested.emit())
 	_add_button(bar, "Přehrát", func(): play_pressed.emit())
 	_add_button(bar, "Menu", func(): menu_pressed.emit())
 	return bar

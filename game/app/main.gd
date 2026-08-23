@@ -42,11 +42,11 @@ func _on_open_editor() -> void:
 	_editor.play_requested.connect(_on_play_from_editor)
 	_editor.menu_requested.connect(_on_leave_editor_to_menu)
 
-func _on_play_from_editor(simulation: Simulation) -> void:
+func _on_play_from_editor(simulation: Simulation, world_position: Variant = null) -> void:
 	_editor.set_active(false)
 	_play_controller = LevelController.new()
 	add_child(_play_controller)
-	_play_controller.setup_with_simulation(simulation)
+	_play_controller.setup_with_simulation(simulation, world_position)
 	_show_overlay("Zpět do editoru", _on_back_to_editor)
 
 func _on_back_to_editor() -> void:

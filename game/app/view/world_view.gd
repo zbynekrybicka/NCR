@@ -32,6 +32,12 @@ const ROBOT_COLORS := {
 const WATER_COLOR_SHALLOW := Color(0.35, 0.7, 1.0, 0.25)
 const WATER_COLOR_DEEP := Color(0.2, 0.45, 0.95, 0.35)
 
+## Ohrádka lemující půdorys levelu — hranoly o průřezu 0,01 kostky přiléhající
+## k okraji mřížky, aby byla vidět hranice hratelné plochy (zejména v
+## krajině, kde level nemá vlastní stěny).
+const BOUNDARY_THICKNESS := CELL_SIZE * 0.1
+const BOUNDARY_COLOR := Color(0.1, 0.1, 0.1)
+
 var world: WorldState
 var _block_layers: Dictionary = {}   # BlockType -> MultiMeshInstance3D
 var _robot_nodes: Array = []         # index robota -> RobotView
@@ -65,6 +71,7 @@ func build(p_world: WorldState) -> void:
 	_build_robots()
 	refresh_items()
 	refresh_water()
+	_build_boundary_fence()
 	_add_light()
 
 func _box_mesh(color: Color, half_height: bool) -> Mesh:
@@ -76,9 +83,35 @@ func _box_mesh(color: Color, half_height: bool) -> Mesh:
 	return mesh
 
 func _add_light() -> void:
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-55, -35, 0)
-	add_child(light)
+	add_sun_and_sky(self)
+
+## Modrá obloha + Slunce vrhající stíny (reálné osvětlení scény, na rozdíl
+## od placeholder barev bloků/robotů zůstává i toto stejné pro hru i editor
+## — sdílené s EditorView, aby autor levelu viděl stejné osvětlení jako hráč).
+static func add_sun_and_sky(parent: Node3D) -> void:
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color(0.25, 0.55, 0.9)
+	sky_material.sky_horizon_color = Color(0.75, 0.85, 0.95)
+	sky_material.ground_bottom_color = Color(0.3, 0.28, 0.25)
+	sky_material.ground_horizon_color = Color(0.75, 0.85, 0.95)
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_SKY
+	environment.sky = sky
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+
+	var world_environment := WorldEnvironment.new()
+	world_environment.environment = environment
+	parent.add_child(world_environment)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-55, -35, 0)
+	sun.light_energy = 1.2
+	sun.shadow_enabled = true
+	parent.add_child(sun)
 
 ## Bloky se překreslují jen po událostech, které mřížku mění.
 func refresh_blocks() -> void:
@@ -133,6 +166,30 @@ func _add_water_box(cell: Vector3i, color: Color) -> void:
 	node.mesh = mesh
 	node.position = cell_to_position(cell)
 	_water_root.add_child(node)
+
+## Čtyři tenké hranoly podél obvodu půdorysu (X/Z), přiléhající zvenčí k
+## okraji mřížky (roh (0,0,0) leží v počátku, viz cell_to_position) — leží
+## celé mimo buňky levelu, aby do jeho prostoru nijak nezasahovaly; jen na
+## úrovni země, ne celý ohraničující box jako u EditorView._build_bounds.
+func _build_boundary_fence() -> void:
+	var extent := Vector3(world.size) * CELL_SIZE
+	var material := StandardMaterial3D.new()
+	material.albedo_color = BOUNDARY_COLOR
+	var half := BOUNDARY_THICKNESS * 0.5
+	var bars := [
+		[Vector3(extent.x, BOUNDARY_THICKNESS, BOUNDARY_THICKNESS), Vector3(extent.x * 0.5, half, -half)],
+		[Vector3(extent.x, BOUNDARY_THICKNESS, BOUNDARY_THICKNESS), Vector3(extent.x * 0.5, half, extent.z + half)],
+		[Vector3(BOUNDARY_THICKNESS, BOUNDARY_THICKNESS, extent.z), Vector3(-half, half, extent.z * 0.5)],
+		[Vector3(BOUNDARY_THICKNESS, BOUNDARY_THICKNESS, extent.z), Vector3(extent.x + half, half, extent.z * 0.5)],
+	]
+	for bar in bars:
+		var mesh := BoxMesh.new()
+		mesh.size = bar[0]
+		mesh.material = material
+		var node := MeshInstance3D.new()
+		node.mesh = mesh
+		node.position = bar[1]
+		add_child(node)
 
 func _build_robots() -> void:
 	for i in world.robots.size():

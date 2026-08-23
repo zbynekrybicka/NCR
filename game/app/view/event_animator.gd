@@ -7,8 +7,8 @@ extends Node
 
 signal finished
 
-const STEP_TIME := 0.14
-const TURN_TIME := 0.10
+const STEP_TIME := 0.35
+const TURN_TIME := 0.25
 
 ## Klipy uvnitř modelu robota podle substepu (§6.4). Bere se první, který
 ## model doopravdy má — kdo klip nemá, se jen posune. Krok po šikmině je pořád

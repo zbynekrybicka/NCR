@@ -6,7 +6,7 @@ extends Node3D
 ## mřížky obyčejným krokováním paprsku po malých úsecích, ne fyzikálním
 ## raycastem (level nemá kolizní tvary, je to čistě datová mřížka).
 
-signal play_requested(simulation: Simulation)
+signal play_requested(simulation: Simulation, world_position: Variant)
 signal menu_requested
 
 enum Tool { BLOCK, ROBOT, ITEM, KEY, ERASE, DEVICE, RESERVOIR, PLATFORM }
@@ -38,6 +38,11 @@ var _platform_selection: Array = []   # Vector3i, buňky zdí v poloze A
 var _hint: String = ""
 
 var _active: bool = true
+
+# Umístění levelu do krajiny (§7.3 import-assets.md) — pozice se váže na
+# cestu k uloženému souboru, ne na LevelData samotné (level ji neukládá).
+var _current_level_path: String = ""
+var _world_placement: WorldPlacementController
 
 func _ready() -> void:
 	session = EditorSession.new()
@@ -115,6 +120,7 @@ func _connect_ui() -> void:
 	ui.new_level_requested.connect(_on_new_level)
 	ui.play_pressed.connect(_on_play)
 	ui.menu_pressed.connect(func(): menu_requested.emit())
+	ui.world_placement_requested.connect(_on_world_placement_requested)
 
 func _process(_delta: float) -> void:
 	if not _active:
@@ -312,6 +318,7 @@ func _on_save(path: String) -> void:
 		path += ".ncr"
 	var error := session.save_to_file(path)
 	if error == OK:
+		_current_level_path = path
 		ui.set_status("Uloženo: %s" % path.get_file())
 	else:
 		ui.set_status("Uložení selhalo (chyba %d)" % error)
@@ -319,6 +326,7 @@ func _on_save(path: String) -> void:
 func _on_load(path: String) -> void:
 	var error := session.load_from_file(path)
 	if error == "":
+		_current_level_path = path
 		_clear_platform_selection()
 		view.show_level(session.level)
 		camera.center_on(session.level)
@@ -329,17 +337,67 @@ func _on_load(path: String) -> void:
 
 func _on_new_level(size: Vector3i) -> void:
 	session = EditorSession.new(LevelData.create_empty(size))
+	_current_level_path = ""
 	_clear_platform_selection()
 	view.show_level(session.level)
 	camera.center_on(session.level)
 	_refresh_status()
+
+# ── Umístění ve světě (§7.3 import-assets.md) ───────────────────────────────
+
+func _on_world_placement_requested() -> void:
+	if _current_level_path == "":
+		_hint = "Nejdřív level ulož — pozice ve světě se váže na uložený soubor."
+		_refresh_status()
+		return
+	var campaign := CampaignMap.new()
+	campaign.load_from_file()
+	var existing = campaign.get_position(_current_level_path)
+
+	set_active(false)
+	_world_placement = WorldPlacementController.new()
+	add_child(_world_placement)
+	_world_placement.confirmed.connect(_on_world_placement_confirmed)
+	_world_placement.cancelled.connect(_on_world_placement_cancelled)
+	var footprint := Vector2(session.level.size.x, session.level.size.z) * WorldView.CELL_SIZE \
+			* LevelController.LEVEL_SCALE_IN_WORLD
+	_world_placement.start_at(
+			existing if existing != null else Vector3.ZERO, existing != null, footprint)
+
+func _on_world_placement_confirmed(position: Vector3) -> void:
+	var campaign := CampaignMap.new()
+	campaign.load_from_file()
+	campaign.set_position(_current_level_path, position)
+	var error := campaign.save_to_file()
+	_close_world_placement()
+	if error == OK:
+		ui.set_status("Umístění ve světě uloženo: %s" % position)
+	else:
+		ui.set_status("Uložení umístění selhalo (chyba %d)" % error)
+
+func _on_world_placement_cancelled() -> void:
+	_close_world_placement()
+
+func _close_world_placement() -> void:
+	_world_placement.queue_free()
+	_world_placement = null
+	set_active(true)
 
 func _on_play() -> void:
 	var problems := session.validate()
 	if not problems.is_empty():
 		ui.set_status("Nelze přehrát — level je nevalidní:\n" + "\n".join(problems))
 		return
-	play_requested.emit(session.start_playtest())
+	play_requested.emit(session.start_playtest(), _saved_world_position())
+
+## Pozice levelu v krajině (viz "Umístit ve světě…"), nebo null, když ji
+## level nemá (nebo ještě nebyl uložený) — §7.3 import-assets.md.
+func _saved_world_position() -> Variant:
+	if _current_level_path == "":
+		return null
+	var campaign := CampaignMap.new()
+	campaign.load_from_file()
+	return campaign.get_position(_current_level_path)
 
 func _refresh_status() -> void:
 	ui.set_mechanism_data(_mechanism_data())

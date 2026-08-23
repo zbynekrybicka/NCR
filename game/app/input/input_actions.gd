@@ -48,6 +48,13 @@ const COMMAND_FOR := {
 	RESTART_LEVEL: Command.CommandType.RESTART_LEVEL,
 }
 
+## Akce, které se při podrženém tlačítku po dokončení kroku opakují samy
+## (plynulá chůze/otáčení) — na rozdíl od akcí na jedno stisknutí (interakce,
+## přepnutí robota, restart).
+const REPEATABLE := [
+	TURN_LEFT, TURN_RIGHT, TURN_AROUND, STEP, STEP_UP, STEP_DOWN,
+]
+
 static func register_defaults() -> void:
 	for action in DEFAULTS.keys():
 		if not InputMap.has_action(action):
