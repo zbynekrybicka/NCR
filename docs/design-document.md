@@ -244,7 +244,7 @@ Jediný způsob, jak level "prohrát", je, že hráč dospěje do stavu, ze kter
 
 #### 2.2.1 Ovládací panel
 
-**Nastavení scény** — Velikost levelu se definuje rozměrem v kostkách (délka, šířka, výška). Výška určuje maximální počet úrovní a maximální vzletovou výšku robota Da. Maximální rozměry nejsou omezené (velké levely jsou ale těžko smysluplně navrhnutelné). Rozměry lze měnit i během editace — rozšíření tažením za okraj, zúžení s potvrzením smazání zasažených objektů.
+**Nastavení scény** — Velikost levelu se definuje rozměrem v kostkách (délka, šířka, výška). Výška určuje maximální počet úrovní a maximální vzletovou výšku robota Da. Maximální rozměry nejsou omezené (velké levely jsou ale těžko smysluplně navrhnutelné). Rozměry lze měnit i během editace: u okrajů levelu jsou rozklikávací prvky, jeden pár (rozšířit/zúžit) pro každý ze čtyř vodorovných směrů a pro nahoru — dno levelu (směr dolů) se rozměrem nikdy nemění. Klik na „rozšířit" přidá řadu kostek v daném směru. Klik na „zúžit" řadu odebere, ale jen je-li celá prázdná — obsahuje-li cokoli (zeď, robota, předmět, zařízení, nádrž, klíč), zúžení se neprovede.
 
 **Umístění objektů** — Objekty se umisťují striktně do krychlové mřížky, standardně vedle existujícího objektu. Přesun objektu: označení + tažení myší, nebo editace souřadnic přímo. Objekty (kromě zdí a šikmin) nelze umístit volně do vzduchu — vždy se kontroluje pevný podklad pod nimi. Na šikminu nelze umístit nic.
 

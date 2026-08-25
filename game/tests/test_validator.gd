@@ -252,6 +252,85 @@ func test_resize_drops_objects_outside() -> void:
 	t.equal(session.level.block_at(Vector3i(3, 1, 0)), GridTypes.BlockType.TARGET,
 			"i smazaný cíl")
 
+# ── Editor: rozšíření/zúžení o řadu (§2.2.1) ────────────────────────────────
+
+func test_resize_row_grow_east_adds_room_without_shifting() -> void:
+	var session := EditorSession.new(_valid_level())
+	session.run(EditorOperation.ResizeRow.new(GridTypes.Direction.EAST, true))
+	t.equal(session.level.size, Vector3i(5, 2, 1), "level je o řadu širší na východ")
+	t.equal(session.level.robots[0].cell, Vector3i(1, 1, 0), "Han zůstal na místě")
+	t.equal(session.level.block_at(Vector3i(4, 0, 0)), GridTypes.BlockType.EMPTY,
+			"nová řada je prázdná")
+	session.undo()
+	t.equal(session.level.size, Vector3i(4, 2, 1), "undo vrátil původní rozměr")
+
+func test_resize_row_grow_west_shifts_everything() -> void:
+	var session := EditorSession.new(_valid_level())
+	session.run(EditorOperation.ResizeRow.new(GridTypes.Direction.WEST, true))
+	t.equal(session.level.size, Vector3i(5, 2, 1), "level je o řadu širší na západ")
+	t.equal(session.level.robots[0].cell, Vector3i(2, 1, 0), "Han se posunul o jednu buňku")
+	t.equal(session.level.key_position, Vector3i(3, 1, 0), "klíč se posunul taky")
+	t.equal(session.level.block_at(Vector3i(0, 0, 0)), GridTypes.BlockType.EMPTY,
+			"nová řada na indexu 0 je prázdná")
+	t.equal(session.level.block_at(Vector3i(1, 0, 0)), GridTypes.BlockType.WALL,
+			"původní podlaha se posunula")
+	session.undo()
+	t.equal(session.level.robots[0].cell, Vector3i(1, 1, 0), "undo vrátil Hana na původní místo")
+
+func test_resize_row_grow_up_adds_layer_on_top() -> void:
+	var session := EditorSession.new(_valid_level())
+	session.run(EditorOperation.ResizeRow.new(GridTypes.Direction.UP, true))
+	t.equal(session.level.size, Vector3i(4, 3, 1), "level je o patro vyšší")
+	t.equal(session.level.robots[0].cell, Vector3i(1, 1, 0), "spodní patra se neposunula")
+
+func test_resize_row_shrink_refuses_nonempty_row() -> void:
+	var session := EditorSession.new(_valid_level())
+	t.is_false(session.can_shrink_in_direction(GridTypes.Direction.EAST),
+			"poslední řada na východě má cíl, nejde ji smazat")
+	var op := EditorOperation.ResizeRow.new(GridTypes.Direction.EAST, false)
+	op.apply(session.level)
+	t.is_false(op.did_apply(), "operace se odmítla provést")
+	t.equal(session.level.size, Vector3i(4, 2, 1), "rozměr se nezměnil")
+
+func test_resize_row_shrink_removes_empty_row() -> void:
+	var level := LevelBuilder.new() \
+		.layer(0, "####.") \
+		.layer(1, ".H+T.") \
+		.build()
+	var session := EditorSession.new(level)
+	t.is_true(session.can_shrink_in_direction(GridTypes.Direction.EAST),
+			"poslední sloupec je prázdný, jde zúžit")
+	session.run(EditorOperation.ResizeRow.new(GridTypes.Direction.EAST, false))
+	t.equal(session.level.size, Vector3i(4, 2, 1), "level je o řadu užší")
+	t.equal(session.level.robots[0].cell, Vector3i(1, 1, 0), "zbytek zůstal na místě")
+	session.undo()
+	t.equal(session.level.size, Vector3i(5, 2, 1), "undo vrátil původní rozměr")
+	t.equal(session.level.block_at(Vector3i(0, 0, 0)), GridTypes.BlockType.WALL,
+			"i zbylá data")
+
+func test_resize_row_shrink_west_shifts_everything() -> void:
+	var level := LevelBuilder.new() \
+		.layer(0, ".####") \
+		.layer(1, ".H+T.") \
+		.build()
+	var session := EditorSession.new(level)
+	t.is_true(session.can_shrink_in_direction(GridTypes.Direction.WEST),
+			"první sloupec je prázdný, jde zúžit na západě")
+	session.run(EditorOperation.ResizeRow.new(GridTypes.Direction.WEST, false))
+	t.equal(session.level.size, Vector3i(4, 2, 1), "level je o řadu užší")
+	t.equal(session.level.robots[0].cell, Vector3i(0, 1, 0), "Han se posunul k novému kraji")
+	t.equal(session.level.key_position, Vector3i(1, 1, 0), "klíč se posunul taky")
+	session.undo()
+	t.equal(session.level.size, Vector3i(5, 2, 1), "undo vrátil původní rozměr")
+	t.equal(session.level.robots[0].cell, Vector3i(1, 1, 0), "i pozice Hana")
+
+func test_resize_row_down_direction_is_never_allowed() -> void:
+	var session := EditorSession.new(_valid_level())
+	t.is_false(session.can_shrink_in_direction(GridTypes.Direction.DOWN),
+			"dno levelu se nikdy nezužuje")
+	t.is_false(EditorSession.RESIZABLE_DIRECTIONS.has(GridTypes.Direction.DOWN),
+			"dno není mezi rozklikávacími směry")
+
 # ── Editor: mechanismy (§13, §16) ──────────────────────────────────────────
 
 func test_place_device_puts_a_wall_under_it() -> void:

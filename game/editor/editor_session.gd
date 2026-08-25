@@ -110,6 +110,20 @@ func device_indices_of_kind(kind: int) -> Array:
 func start_playtest() -> Simulation:
 	return Simulation.new(level.duplicate_level())
 
+## Směry, ve kterých lze level rozšířit/zúžit o řadu (design dok. §2.2.1) —
+## DOWN chybí schválně, dno levelu se nikdy nemění.
+const RESIZABLE_DIRECTIONS := [
+	GridTypes.Direction.NORTH, GridTypes.Direction.EAST,
+	GridTypes.Direction.SOUTH, GridTypes.Direction.WEST,
+	GridTypes.Direction.UP,
+]
+
+## Šlo by level v daném směru zúžit o řadu? Zúžení odmítne, není-li
+## odebíraná řada úplně prázdná — editor UI se tím ptá předem, aby operaci
+## vůbec nespouštělo (a nezanášelo tak undo historii nic neudělavší akcí).
+func can_shrink_in_direction(direction: int) -> bool:
+	return EditorOperation.ResizeRow.new(direction, false).can_shrink(level)
+
 func save_to_file(path: String) -> Error:
 	return LevelWriter.save_to_file(level, path)
 

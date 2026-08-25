@@ -153,6 +153,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_click() # pravé tlačítko je vyhrazené pro orbit kamery (EditorCamera)
 
 func _on_click() -> void:
+	var handle := _pick_resize_handle()
+	if not handle.is_empty():
+		_on_resize_handle_clicked(int(handle["direction"]), bool(handle["grow"]))
+		return
 	var pick := _pick()
 	if not pick.hit:
 		return
@@ -181,6 +185,45 @@ func _on_click() -> void:
 			_toggle_platform_cell(pick.solid_cell)
 	view.rebuild()
 	_refresh_status()
+
+# ── Rozšíření/zúžení levelu (§2.2.1) ────────────────────────────────────
+
+## Klik na zelený prvek level rozšíří o řadu ve zvoleném směru, klik na
+## červený ho zúží — ale jen když je celá odebíraná řada úplně prázdná;
+## jinak se zúžení odmítne a jen se vypíše hláška (aby se do undo historie
+## nezanášela operace, která nic nezměnila).
+func _on_resize_handle_clicked(direction: int, grow: bool) -> void:
+	if not grow and not session.can_shrink_in_direction(direction):
+		_hint = "Zúžení směrem %s nejde — odebíraná řada není prázdná." \
+				% String(EditorUi.DIRECTION_LABELS.get(direction, "?"))
+		view.rebuild()
+		_refresh_status()
+		return
+	session.run(EditorOperation.ResizeRow.new(direction, grow))
+	view.rebuild()
+	_refresh_status()
+
+## Vlastní paprsek na prvky u okraje levelu, stejným způsobem jako `_pick()`
+## na mřížku, ale bez krokování — jde jen o pár koulí, obyčejný test
+## paprsek-koule stačí. Vrací {} když paprsek nic netrefil.
+func _pick_resize_handle() -> Dictionary:
+	var mouse := get_viewport().get_mouse_position()
+	var from := camera.camera.project_ray_origin(mouse)
+	var dir := camera.camera.project_ray_normal(mouse)
+	var best: Dictionary = {}
+	var best_dist := INF
+	for handle in view.resize_handles():
+		var center: Vector3 = handle["position"]
+		var proj := (center - from).dot(dir)
+		if proj < 0.0:
+			continue
+		var closest := from + dir * proj
+		if closest.distance_to(center) > float(handle["radius"]):
+			continue
+		if proj < best_dist:
+			best_dist = proj
+			best = handle
+	return best
 
 # ── Mechanismy (§13) ─────────────────────────────────────────────────────
 

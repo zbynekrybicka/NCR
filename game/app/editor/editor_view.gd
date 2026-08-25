@@ -7,6 +7,7 @@ extends Node3D
 ## operaci — levely v editoru jsou malé, výkon není problém.
 
 const CELL_SIZE := WorldView.CELL_SIZE
+const RESIZE_HANDLE_RADIUS := 0.28
 
 var level: LevelData
 
@@ -14,6 +15,7 @@ var _content: Node3D
 var _cursor: MeshInstance3D
 var _mesh_cache: Dictionary = {} # block_type -> Mesh
 var _platform_selection: Array = [] # Vector3i, rozestavěná plošina
+var _resize_handles: Array = [] # {direction:int, grow:bool, position:Vector3, radius:float}
 
 func _ready() -> void:
 	_content = Node3D.new()
@@ -40,6 +42,15 @@ func rebuild() -> void:
 	_build_platforms()
 	_build_pumps()
 	_build_platform_selection()
+	_build_resize_handles()
+
+## Rozklikávací prvky pro rozšíření/zúžení levelu o řadu, jeden pár
+## (zelený = rozšířit, červený = zúžit) u okraje pro každý směr z
+## EditorSession.RESIZABLE_DIRECTIONS (design dok. §2.2.1). EditorController
+## na ně hází vlastní paprsek (stejně jako `_pick()` u mřížky), proto tu není
+## potřeba žádná kolizní forma — jen si drží středy a poloměr.
+func resize_handles() -> Array:
+	return _resize_handles
 
 ## Rozestavěná plošina (buňky vybrané nástrojem, ještě nepotvrzené).
 func set_platform_selection(cells: Array) -> void:
@@ -221,6 +232,56 @@ func _build_pumps() -> void:
 		_add_line(WorldView.cell_to_position(from), WorldView.cell_to_position(to),
 				Color(0.2, 0.9, 0.9))
 		_add_marker(from, Color(0.2, 0.9, 0.9), "Čerpadlo %d →" % i)
+
+func _build_resize_handles() -> void:
+	_resize_handles.clear()
+	var full := Vector3(level.size) * CELL_SIZE
+	var half := full * 0.5
+	for direction in EditorSession.RESIZABLE_DIRECTIONS:
+		for grow in [true, false]:
+			var position := _resize_handle_position(direction, grow, full, half)
+			_resize_handles.append({"direction": direction, "grow": grow,
+					"position": position, "radius": RESIZE_HANDLE_RADIUS})
+			_add_resize_handle_marker(position, grow)
+
+## Zelený prvek sedí kousek za okrajem levelu (rozšíření), červený kousek
+## před ním, ještě uvnitř (zúžení) — oba uprostřed příslušné stěny/hrany.
+func _resize_handle_position(direction: int, grow: bool, full: Vector3, half: Vector3) -> Vector3:
+	var gap := CELL_SIZE * 0.5
+	var outward := gap if grow else -gap
+	match direction:
+		GridTypes.Direction.EAST:
+			return Vector3(full.x + outward, half.y, half.z)
+		GridTypes.Direction.WEST:
+			return Vector3(-outward, half.y, half.z)
+		GridTypes.Direction.SOUTH:
+			return Vector3(half.x, half.y, full.z + outward)
+		GridTypes.Direction.NORTH:
+			return Vector3(half.x, half.y, -outward)
+		_: # UP — DOWN se v RESIZABLE_DIRECTIONS nevyskytuje (dno se nemění)
+			return Vector3(half.x, full.y + outward, half.z)
+
+func _add_resize_handle_marker(position: Vector3, grow: bool) -> void:
+	var mesh := SphereMesh.new()
+	mesh.radius = RESIZE_HANDLE_RADIUS
+	mesh.height = RESIZE_HANDLE_RADIUS * 2.0
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.3, 0.9, 0.3, 0.9) if grow else Color(0.9, 0.3, 0.3, 0.9)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mesh.surface_set_material(0, material)
+	var node := MeshInstance3D.new()
+	node.mesh = mesh
+	node.position = position
+	_content.add_child(node)
+
+	var label := Label3D.new()
+	label.text = "+" if grow else "-"
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 48
+	label.position = position
+	_content.add_child(label)
 
 func _build_platform_selection() -> void:
 	for cell in _platform_selection:

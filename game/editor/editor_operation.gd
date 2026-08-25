@@ -14,6 +14,70 @@ func describe() -> String:
 	return "operace"
 
 
+## Sdílené pro Resize a ResizeRow: zahodí objekty mimo aktuální rozměry
+## levelu po změně velikosti. Zařízení a nádrže se odkazují číslem (plošiny,
+## čerpadla), takže se odkazy přemapují a mechanismus, který přišel o
+## povinnou vazbu, se odebere celý — jinak by level zůstal nevalidní
+## (V10, V17).
+static func _drop_objects_outside(level: LevelData) -> void:
+	for i in range(level.items.size() - 1, -1, -1):
+		if not level.is_inside(level.items[i].cell):
+			level.items.remove_at(i)
+	for i in range(level.robots.size() - 1, -1, -1):
+		if not level.is_inside(level.robots[i].cell):
+			level.robots.remove_at(i)
+
+	var device_map := {}
+	var kept_devices: Array = []
+	for i in level.devices.size():
+		if not level.is_inside(level.devices[i].cell):
+			continue
+		device_map[i] = kept_devices.size()
+		kept_devices.append(level.devices[i])
+	level.devices = kept_devices
+
+	var reservoir_map := {}
+	var kept_reservoirs: Array = []
+	for i in level.reservoirs.size():
+		if not level.is_inside(level.reservoirs[i].anchor):
+			continue
+		reservoir_map[i] = kept_reservoirs.size()
+		kept_reservoirs.append(level.reservoirs[i])
+	level.reservoirs = kept_reservoirs
+
+	for i in range(level.platforms.size() - 1, -1, -1):
+		var platform = level.platforms[i]
+		var outside := false
+		for cell in platform.cells:
+			if not level.is_inside(cell + platform.pose_a) \
+					or not level.is_inside(cell + platform.pose_b):
+				outside = true
+				break
+		platform.linked_cabinets = _remap_indices(platform.linked_cabinets, device_map)
+		platform.linked_control_units = _remap_indices(platform.linked_control_units, device_map)
+		if outside or platform.linked_cabinets.is_empty():
+			level.platforms.remove_at(i)
+
+	for i in range(level.pumps.size() - 1, -1, -1):
+		var pump = level.pumps[i]
+		if not reservoir_map.has(pump.reservoir_a) or not reservoir_map.has(pump.reservoir_b):
+			level.pumps.remove_at(i)
+			continue
+		pump.reservoir_a = reservoir_map[pump.reservoir_a]
+		pump.reservoir_b = reservoir_map[pump.reservoir_b]
+		pump.linked_cabinets = _remap_indices(pump.linked_cabinets, device_map)
+		pump.linked_control_unit = int(device_map.get(pump.linked_control_unit, -1))
+		if pump.linked_cabinets.is_empty():
+			level.pumps.remove_at(i)
+
+static func _remap_indices(indices: Array, mapping: Dictionary) -> Array:
+	var out: Array = []
+	for index in indices:
+		if mapping.has(index):
+			out.append(mapping[index])
+	return out
+
+
 ## Změna jedné buňky (typ, model, orientace).
 class SetCell extends EditorOperation:
 	var cell: Vector3i
@@ -595,7 +659,7 @@ class Resize extends EditorOperation:
 		level.blocks = resized.blocks
 		level.models = resized.models
 		level.orientations = resized.orientations
-		_drop_outside(level)
+		EditorOperation._drop_objects_outside(level)
 
 	func revert(level: LevelData) -> void:
 		var restored := _snapshot.duplicate_level()
@@ -611,67 +675,148 @@ class Resize extends EditorOperation:
 		level.pumps = restored.pumps
 		level.key_position = restored.key_position
 
-	## Zmenšení levelu smaže zasažené objekty. Zařízení i nádrže se odkazují
-	## číslem (plošiny, čerpadla), takže se odkazy přemapují a mechanismus,
-	## který přišel o povinnou vazbu, se odebere celý — jinak by po zmenšení
-	## zůstal level nevalidní (V10, V17).
-	func _drop_outside(level: LevelData) -> void:
-		for i in range(level.items.size() - 1, -1, -1):
-			if not level.is_inside(level.items[i].cell):
-				level.items.remove_at(i)
-		for i in range(level.robots.size() - 1, -1, -1):
-			if not level.is_inside(level.robots[i].cell):
-				level.robots.remove_at(i)
-
-		var device_map := {}
-		var kept_devices: Array = []
-		for i in level.devices.size():
-			if not level.is_inside(level.devices[i].cell):
-				continue
-			device_map[i] = kept_devices.size()
-			kept_devices.append(level.devices[i])
-		level.devices = kept_devices
-
-		var reservoir_map := {}
-		var kept_reservoirs: Array = []
-		for i in level.reservoirs.size():
-			if not level.is_inside(level.reservoirs[i].anchor):
-				continue
-			reservoir_map[i] = kept_reservoirs.size()
-			kept_reservoirs.append(level.reservoirs[i])
-		level.reservoirs = kept_reservoirs
-
-		for i in range(level.platforms.size() - 1, -1, -1):
-			var platform = level.platforms[i]
-			var outside := false
-			for cell in platform.cells:
-				if not level.is_inside(cell + platform.pose_a) \
-						or not level.is_inside(cell + platform.pose_b):
-					outside = true
-					break
-			platform.linked_cabinets = _remap(platform.linked_cabinets, device_map)
-			platform.linked_control_units = _remap(platform.linked_control_units, device_map)
-			if outside or platform.linked_cabinets.is_empty():
-				level.platforms.remove_at(i)
-
-		for i in range(level.pumps.size() - 1, -1, -1):
-			var pump = level.pumps[i]
-			if not reservoir_map.has(pump.reservoir_a) or not reservoir_map.has(pump.reservoir_b):
-				level.pumps.remove_at(i)
-				continue
-			pump.reservoir_a = reservoir_map[pump.reservoir_a]
-			pump.reservoir_b = reservoir_map[pump.reservoir_b]
-			pump.linked_cabinets = _remap(pump.linked_cabinets, device_map)
-			pump.linked_control_unit = int(device_map.get(pump.linked_control_unit, -1))
-			if pump.linked_cabinets.is_empty():
-				level.pumps.remove_at(i)
-
-	static func _remap(indices: Array, mapping: Dictionary) -> Array:
-		var out: Array = []
-		for index in indices:
-			if mapping.has(index):
-				out.append(mapping[index])
-		return out
-
 	func describe() -> String:
 		return "změna rozměrů na %s" % new_size
+
+
+## Rozšíření/zúžení levelu o jednu řadu ve zvoleném směru — ovládá se
+## rozklikávacími prvky u okrajů levelu v editoru (design dok. §2.2.1).
+## Směr DOWN je vyloučen, dno levelu se nikdy nemění. Zúžení se smí provést,
+## jen když je celá odebíraná řada úplně prázdná (žádný blok, robot, předmět,
+## zařízení, nádrž ani klíč) — jinak `apply()` level nezmění (ověř `can_shrink`
+## / `did_apply` před zápisem do undo historie, viz EditorSession).
+class ResizeRow extends EditorOperation:
+	var direction: int      # GridTypes.Direction, kromě DOWN
+	var grow: bool
+	var _snapshot: LevelData = null
+	var _applied: bool = false
+
+	func _init(p_direction: int, p_grow: bool) -> void:
+		direction = p_direction
+		grow = p_grow
+
+	func apply(level: LevelData) -> void:
+		_snapshot = level.duplicate_level()
+		_applied = false
+		var unit := _axis_unit(direction)
+		if grow:
+			var shift := unit if _is_near(direction) else Vector3i.ZERO
+			_resize(level, shift, level.size + unit)
+			_applied = true
+		elif can_shrink(level):
+			var shift := -unit if _is_near(direction) else Vector3i.ZERO
+			_resize(level, shift, level.size - unit)
+			_applied = true
+
+	func revert(level: LevelData) -> void:
+		if not _applied or _snapshot == null:
+			return
+		var restored := _snapshot.duplicate_level()
+		level.size = restored.size
+		level.blocks = restored.blocks
+		level.models = restored.models
+		level.orientations = restored.orientations
+		level.items = restored.items
+		level.robots = restored.robots
+		level.reservoirs = restored.reservoirs
+		level.devices = restored.devices
+		level.platforms = restored.platforms
+		level.pumps = restored.pumps
+		level.key_position = restored.key_position
+
+	## Skutečně se operace provedla? (Zúžení se odmítne, není-li řada prázdná.)
+	func did_apply() -> bool:
+		return _applied
+
+	## Je celá řada, kterou by zúžení odebralo, prázdná? Volá i EditorSession
+	## pro dotaz z UI, ještě než se operace vůbec spustí.
+	func can_shrink(level: LevelData) -> bool:
+		if direction == GridTypes.Direction.DOWN:
+			return false
+		if _axis_length(level.size, direction) <= 1:
+			return false
+		return _removed_slice_is_empty(level, _shrink_slice_index(level))
+
+	func _removed_slice_is_empty(level: LevelData, slice: int) -> bool:
+		for index in level.cell_count():
+			var cell := level.index_to_cell(index)
+			if _cell_axis_coord(cell) != slice:
+				continue
+			if level.blocks[index] != GridTypes.BlockType.EMPTY:
+				return false
+		for it in level.items:
+			if _cell_axis_coord(it.cell) == slice:
+				return false
+		for r in level.robots:
+			if _cell_axis_coord(r.cell) == slice:
+				return false
+		for d in level.devices:
+			if _cell_axis_coord(d.cell) == slice:
+				return false
+		for res in level.reservoirs:
+			if _cell_axis_coord(res.anchor) == slice:
+				return false
+		if _cell_axis_coord(level.key_position) == slice:
+			return false
+		return true
+
+	func _shrink_slice_index(level: LevelData) -> int:
+		if _is_near(direction):
+			return 0
+		return _axis_length(level.size, direction) - 1
+
+	## Přestaví level na nové rozměry a posune všechny buňky/objekty o `shift`
+	## (nenulové jen u WEST/NORTH, kde se přidává/ubírá řada na nulovém konci
+	## osy — viz _is_near).
+	func _resize(level: LevelData, shift: Vector3i, new_size: Vector3i) -> void:
+		var resized := LevelData.create_empty(new_size)
+		for index in level.cell_count():
+			var cell := level.index_to_cell(index)
+			var dest := cell + shift
+			if not resized.is_inside(dest):
+				continue
+			resized.set_block(dest, level.blocks[index])
+			resized.set_model(dest, level.models[index])
+			resized.set_orientation(dest, level.orientations[index])
+		level.size = resized.size
+		level.blocks = resized.blocks
+		level.models = resized.models
+		level.orientations = resized.orientations
+
+		level.key_position += shift
+		for it in level.items:
+			it.cell += shift
+		for r in level.robots:
+			r.cell += shift
+		for res in level.reservoirs:
+			res.anchor += shift
+		for d in level.devices:
+			d.cell += shift
+		for p in level.platforms:
+			for i in p.cells.size():
+				p.cells[i] += shift
+
+		EditorOperation._drop_objects_outside(level)
+
+	func _cell_axis_coord(cell: Vector3i) -> int:
+		var unit := _axis_unit(direction)
+		return unit.x * cell.x + unit.y * cell.y + unit.z * cell.z
+
+	static func _axis_length(size: Vector3i, dir: int) -> int:
+		var unit := _axis_unit(dir)
+		return unit.x * size.x + unit.y * size.y + unit.z * size.z
+
+	static func _axis_unit(dir: int) -> Vector3i:
+		var v := GridTypes.dir_vector(dir)
+		return Vector3i(abs(v.x), abs(v.y), abs(v.z))
+
+	## WEST a NORTH rostou/zužují na nulovém konci osy — tam se musí zbytek
+	## levelu posunout, aby nová řada vznikla na indexu 0 (resp. aby se
+	## odebrala právě řada 0). EAST, SOUTH a UP rostou/zužují na horním konci,
+	## kde žádný posun není potřeba.
+	static func _is_near(dir: int) -> bool:
+		return dir == GridTypes.Direction.WEST or dir == GridTypes.Direction.NORTH
+
+	func describe() -> String:
+		var verb := "rozšíření" if grow else "zúžení"
+		return "%s levelu směrem %s" % [verb, GridTypes.Direction.keys()[direction]]
