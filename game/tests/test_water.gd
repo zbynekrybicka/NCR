@@ -26,14 +26,25 @@ func test_cavity_detection() -> void:
 	t.equal(world.reservoir_at(Vector3i(2, 1, 1)), 0, "vnitřek do nádrže patří")
 
 func test_open_cavity_is_not_a_reservoir() -> void:
-	# Bez podlahy voda vyteče ven z levelu → dutina není nádrž (§9.1).
+	# Chybějící boční stěna → voda vyteče ven z levelu → dutina není nádrž (§9.1).
+	var level := LevelBuilder.new() \
+		.layer(0, "#####\n#....\n#####") \
+		.layer(1, "#####\n#....\n#####") \
+		.reservoir(Vector3i(1, 0, 1), 0) \
+		.build()
+	var world := WorldState.from_level(level)
+	t.equal(world.reservoirs[0].cells.size(), 0, "netěsná dutina není nádrž")
+
+func test_level_floor_is_reservoir_bottom() -> void:
+	# Bez podlahy z kostek, ale na dně levelu → dno levelu se chová jako plná
+	# zeď, dutina je uzavřená a je to platná nádrž (§9.1).
 	var level := LevelBuilder.new() \
 		.layer(0, "#####\n#...#\n#####") \
 		.layer(1, "#####\n#...#\n#####") \
 		.reservoir(Vector3i(1, 0, 1), 0) \
 		.build()
 	var world := WorldState.from_level(level)
-	t.equal(world.reservoirs[0].cells.size(), 0, "netěsná dutina není nádrž")
+	t.equal(world.reservoirs[0].cells.size(), 6, "dno levelu drží vodu bez vlastní podlahy")
 
 func test_surface_arithmetic() -> void:
 	var res: ReservoirState = _basin(3).reservoirs[0]

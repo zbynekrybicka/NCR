@@ -73,30 +73,31 @@ static func _component_containing(components: Array, cell: Vector3i) -> Array:
 	return []
 
 ## Vrátí seznam uzavřených dutin (každá jako pole buněk). Dutina je uzavřená,
-## když z ní voda nemůže vytéct — tj. žádná její buňka nevede vodorovně ani
-## dolů ven z levelu nebo do jiné, netěsné buňky. Okraj levelu se pro vodu
-## chová jako díra, ne jako zeď (§9.1: dutina dotýkající se okraje levelu
-## na spodní hraně nebo neuzavřené stěny není nádrž).
+## když z ní voda nemůže vytéct — tj. žádná její buňka nevede vodorovně ven
+## z levelu nebo do jiné, netěsné buňky. Dno levelu (buňka bez sousední buňky
+## pod sebou v rámci mřížky) funguje jako plná zeď — nádrž tak nemusí mít
+## vlastní dno z kostek, stačí spodní hrana levelu. Boční okraj levelu se
+## pro vodu naopak chová jako díra, ne jako zeď — nádrž musí mít vlastní
+## boční stěny (§9.1: dutina dotýkající se bočního okraje levelu nebo jinak
+## neuzavřené stěny není nádrž).
 static func find_closed_cavities(world: WorldState) -> Array:
 	var n := world.cell_count()
 	var leaky := PackedByteArray()
 	leaky.resize(n)
 	leaky.fill(0)
 
-	# 1) Semínka: buňka, ze které voda uteče přímo mimo level.
+	# 1) Semínka: buňka, ze které voda uteče přímo mimo level (vodorovně —
+	#    dolů z levelu uniknout nejde, dno levelu je plná zeď).
 	var queue: Array = []
 	for index in n:
 		var cell := world.index_to_cell(index)
 		if not _holds_water(world, cell):
 			continue
 		var escapes := false
-		if not world.is_inside(cell + GridTypes.DOWN_VECTOR):
-			escapes = true
-		else:
-			for dir in GridTypes.HORIZONTAL_DIRS:
-				if not world.is_inside(cell + GridTypes.dir_vector(dir)):
-					escapes = true
-					break
+		for dir in GridTypes.HORIZONTAL_DIRS:
+			if not world.is_inside(cell + GridTypes.dir_vector(dir)):
+				escapes = true
+				break
 		if escapes:
 			leaky[index] = 1
 			queue.append(cell)
