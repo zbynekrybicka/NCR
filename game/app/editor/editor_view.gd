@@ -113,10 +113,14 @@ func _mesh_for(block_type: int) -> Mesh:
 	if _mesh_cache.has(block_type):
 		return _mesh_cache[block_type]
 	var color: Color = WorldView.BLOCK_COLORS.get(block_type, Color.MAGENTA)
+	var texture: Texture2D = WorldView.BLOCK_TEXTURES.get(block_type)
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(CELL_SIZE, CELL_SIZE * (0.5 if block_type == GridTypes.BlockType.RAMP else 1.0), CELL_SIZE)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = color
+	if texture != null:
+		material.albedo_texture = texture
+	else:
+		material.albedo_color = color
 	mesh.material = material
 	_mesh_cache[block_type] = mesh
 	return mesh
@@ -176,13 +180,17 @@ func _build_water() -> void:
 	var world := WorldState.from_level(level)
 	for i in world.reservoirs.size():
 		var res: ReservoirState = world.reservoirs[i]
-		for cell in res.cells:
+		for cell: Vector3i in res.cells:
 			var depth := world.water_depth_at(cell)
-			if depth == GridTypes.WaterDepth.DRY and not res.unlimited:
+			var shown := depth != GridTypes.WaterDepth.DRY or res.unlimited
+			if not shown:
 				continue
-			var color := Color(0.2, 0.45, 0.95, 0.35) if depth == GridTypes.WaterDepth.DEEP \
-					else Color(0.35, 0.7, 1.0, 0.25)
-			_add_translucent_box(cell, color, 0.98)
+			var above: Vector3i = cell + GridTypes.UP_VECTOR
+			var above_shown := res.has_cell(above) and \
+					(world.water_depth_at(above) != GridTypes.WaterDepth.DRY or res.unlimited)
+			if above_shown:
+				continue # pod hladinou, nezvýrazňovat
+			_content.add_child(WorldView.make_water_surface(cell, depth == GridTypes.WaterDepth.DEEP))
 		_add_marker(res.anchor, Color(0.2, 0.5, 1.0), "Nádrž %d" % i)
 
 func _build_devices() -> void:

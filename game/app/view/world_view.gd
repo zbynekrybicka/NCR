@@ -17,6 +17,16 @@ const BLOCK_COLORS := {
 	GridTypes.BlockType.TARGET: Color(0.95, 0.80, 0.20),
 }
 
+## Vygenerované textury (docs/zadani_textury_kostky_urovne_dalle.md) — RAMP a
+## TARGET textury zatím nemají, zůstávají u ploché barvy z BLOCK_COLORS.
+const BLOCK_TEXTURES := {
+	GridTypes.BlockType.WALL: preload("res://assets/level_blocks/textures/zed_ocel.jpg"),
+	GridTypes.BlockType.DIRT: preload("res://assets/level_blocks/textures/hlina.jpg"),
+	GridTypes.BlockType.STONE: preload("res://assets/level_blocks/textures/kamen.jpg"),
+	GridTypes.BlockType.ICE: preload("res://assets/level_blocks/textures/led.jpg"),
+	GridTypes.BlockType.WOOD: preload("res://assets/level_blocks/textures/drevo.jpg"),
+}
+
 const ROBOT_COLORS := {
 	GridTypes.RobotKind.HAN: Color(0.60, 0.40, 0.20),
 	GridTypes.RobotKind.DUL: Color(0.20, 0.45, 0.85),
@@ -27,10 +37,13 @@ const ROBOT_COLORS := {
 	GridTypes.RobotKind.IL: Color(0.90, 0.75, 0.25),
 }
 
-## Voda se kreslí stejně jako v editoru (§17.1) — průhledná kostka na každé
-## zatopené buňce, sytější v hluboké vodě.
+## Voda se kreslí stejně jako v editoru (§17.1) — jen hladina, ne celý objem
+## pod ní (§9.2): tenká čtvercová deska v horní části kostky u hluboké vody,
+## v polovině výšky kostky u mělčiny. Kreslí se jen nejvyšší mokrá buňka v
+## každém sloupci nádrže, sytější barvou v hluboké vodě.
 const WATER_COLOR_SHALLOW := Color(0.35, 0.7, 1.0, 0.25)
 const WATER_COLOR_DEEP := Color(0.2, 0.45, 0.95, 0.35)
+const WATER_SURFACE_THICKNESS := CELL_SIZE * 0.04
 
 ## Ohrádka lemující půdorys levelu — hranoly o průřezu 0,01 kostky přiléhající
 ## k okraji mřížky, aby byla vidět hranice hratelné plochy (zejména v
@@ -61,7 +74,8 @@ func build(p_world: WorldState) -> void:
 		var multi_mesh := MultiMesh.new()
 		multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
 		multi_mesh.mesh = _box_mesh(BLOCK_COLORS[block_type],
-				block_type == GridTypes.BlockType.RAMP)
+				block_type == GridTypes.BlockType.RAMP,
+				BLOCK_TEXTURES.get(block_type))
 		var instance := MultiMeshInstance3D.new()
 		instance.multimesh = multi_mesh
 		add_child(instance)
@@ -74,11 +88,14 @@ func build(p_world: WorldState) -> void:
 	_build_boundary_fence()
 	_add_light()
 
-func _box_mesh(color: Color, half_height: bool) -> Mesh:
+func _box_mesh(color: Color, half_height: bool, texture: Texture2D = null) -> Mesh:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(CELL_SIZE, CELL_SIZE * (0.5 if half_height else 1.0), CELL_SIZE)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = color
+	if texture != null:
+		material.albedo_texture = texture
+	else:
+		material.albedo_color = color
 	mesh.material = material
 	return mesh
 
@@ -147,25 +164,33 @@ func refresh_water() -> void:
 	_water_root = Node3D.new()
 	add_child(_water_root)
 	for res in world.reservoirs:
-		for cell in res.cells:
+		for cell: Vector3i in res.cells:
 			var depth := world.water_depth_at(cell)
 			if depth == GridTypes.WaterDepth.DRY:
 				continue
-			_add_water_box(cell, WATER_COLOR_DEEP if depth == GridTypes.WaterDepth.DEEP \
-					else WATER_COLOR_SHALLOW)
+			var above: Vector3i = cell + GridTypes.UP_VECTOR
+			if res.has_cell(above) and world.water_depth_at(above) != GridTypes.WaterDepth.DRY:
+				continue # pod hladinou, nezvýrazňovat
+			_water_root.add_child(make_water_surface(cell, depth == GridTypes.WaterDepth.DEEP))
 
-func _add_water_box(cell: Vector3i, color: Color) -> void:
+## Tenká deska hladiny na dané buňce — u hluboké vody přiléhá k horní stěně
+## kostky, u mělčiny leží v polovině její výšky. Sdíleno s EditorView, aby
+## autor levelu viděl přesně to, co uvidí hráč.
+static func make_water_surface(cell: Vector3i, deep: bool) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3.ONE * (CELL_SIZE * 0.98)
+	mesh.size = Vector3(CELL_SIZE * 0.98, WATER_SURFACE_THICKNESS, CELL_SIZE * 0.98)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = color
+	material.albedo_color = WATER_COLOR_DEEP if deep else WATER_COLOR_SHALLOW
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mesh.surface_set_material(0, material)
 	var node := MeshInstance3D.new()
 	node.mesh = mesh
-	node.position = cell_to_position(cell)
-	_water_root.add_child(node)
+	var pos := cell_to_position(cell)
+	if deep:
+		pos.y += CELL_SIZE * 0.5 - WATER_SURFACE_THICKNESS * 0.5
+	node.position = pos
+	return node
 
 ## Čtyři tenké hranoly podél obvodu půdorysu (X/Z), přiléhající zvenčí k
 ## okraji mřížky (roh (0,0,0) leží v počátku, viz cell_to_position) — leží
