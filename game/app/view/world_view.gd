@@ -168,6 +168,8 @@ func refresh_water() -> void:
 			var depth := world.water_depth_at(cell)
 			if depth == GridTypes.WaterDepth.DRY:
 				continue
+			if world.block_at(cell) != GridTypes.BlockType.EMPTY:
+				continue # led nebo jiný blok na hladině už buňku zabírá vizuálně
 			var above: Vector3i = cell + GridTypes.UP_VECTOR
 			if res.has_cell(above) and world.water_depth_at(above) != GridTypes.WaterDepth.DRY:
 				continue # pod hladinou, nezvýrazňovat

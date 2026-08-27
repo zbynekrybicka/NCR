@@ -190,6 +190,8 @@ func _build_water() -> void:
 					(world.water_depth_at(above) != GridTypes.WaterDepth.DRY or res.unlimited)
 			if above_shown:
 				continue # pod hladinou, nezvýrazňovat
+			if world.block_at(cell) != GridTypes.BlockType.EMPTY:
+				continue # led nebo jiný blok na hladině už buňku zabírá vizuálně
 			_content.add_child(WorldView.make_water_surface(cell, depth == GridTypes.WaterDepth.DEEP))
 		_add_marker(res.anchor, Color(0.2, 0.5, 1.0), "Nádrž %d" % i)
 
