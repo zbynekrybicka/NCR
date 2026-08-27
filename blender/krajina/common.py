@@ -356,6 +356,7 @@ MATERIALS = {
     "zaslepovaci_plocha": dict(color="#FFF3D0", emission_color="#FFF3D0", emission_strength=2.5),
     "rez":            dict(color="#7A4A28", metallic=0.6, roughness=0.6),   # kap. 6.4 rezavý drát
     "sklo":           dict(color="#8C8F94", metallic=0.9, roughness=0.1),   # kap. 5.1 okenní sklo
+    "interier_tma":   dict(color="#0D0D0D", roughness=0.95),   # tmavá deska za okny domu
     "drevo_suchy":    dict(color="#6B5F4A"),   # kap. 8.2 suché/holé stromy
     "lava_portal":    dict(color="#FF5A0A", emission_color="#FF7A1A", emission_strength=3.0),
     "lava_odlesk":    dict(color="#FF5A0A", emission_color="#FF7A1A", emission_strength=0.8),

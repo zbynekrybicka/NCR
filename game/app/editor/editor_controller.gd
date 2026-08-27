@@ -131,8 +131,13 @@ func _process(_delta: float) -> void:
 		return
 	# Guma a výběr buněk plošiny míří na kostku samotnou, ostatní nástroje
 	# na prázdnou buňku před ní.
-	var target_cell: Vector3i = pick.solid_cell \
-			if _tool == Tool.ERASE or _tool == Tool.PLATFORM else pick.place_cell
+	var target_cell: Vector3i
+	if _tool == Tool.ERASE:
+		target_cell = _erase_target_cell(pick.solid_cell, pick.place_cell)
+	elif _tool == Tool.PLATFORM:
+		target_cell = pick.solid_cell
+	else:
+		target_cell = pick.place_cell
 	view.set_cursor(target_cell, session.level.is_inside(target_cell))
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -166,7 +171,7 @@ func _on_click() -> void:
 				session.run(EditorOperation.SetCell.new(
 						pick.place_cell, _block_type, 0, _orientation))
 		Tool.ERASE:
-			_erase_at(pick.solid_cell)
+			_erase_at(pick.solid_cell, pick.place_cell)
 		Tool.ROBOT:
 			if session.level.is_inside(pick.place_cell):
 				session.run(EditorOperation.PlaceRobotAppend.new(
@@ -315,7 +320,35 @@ func _on_remove_mechanism(kind: String, index: int) -> void:
 	view.rebuild()
 	_refresh_status()
 
-func _erase_at(cell: Vector3i) -> void:
+## Buňka, kterou guma skutečně trefí, s prioritou robota/předmětu/nesolidního
+## bloku (cíl apod.) před zdí samotnou. Roboti, předměty a nesolidní bloky
+## (`GridTypes.is_solid()` == false, např. cíl — chodí se přes něj, takže
+## picking paprsek jím jen "prochází") stojí v prázdné buňce (typicky na vrcholu
+## podlahy, `place_cell`), ne v trefené pevné buňce (`cell`) — bez téhle
+## priority by guma na ně vůbec nedosáhla (paprsek by je přeskočil jako
+## průhledné) a buď omylem smazala podlahu pod nimi, nebo — stojí-li objekt
+## na spodní vrstvě levelu — by kurzor ukazoval na virtuální podlahu editoru
+## mimo skutečnou mřížku (viz `_is_pick_solid`).
+## Kurzor (`_process`) i skutečné mazání (`_erase_at`) proto počítají cílovou
+## buňku stejnou funkcí, aby vždy ukazovaly totéž. Guma smí smazat cokoli
+## (i klíč, cíl, jediného robota…) bez ohledu na to, že tím level rozbije
+## validační pravidla (§16.2) — validace o tom autora jen informuje, nic
+## nezakazuje.
+func _erase_target_cell(cell: Vector3i, place_cell: Vector3i) -> Vector3i:
+	for candidate in [place_cell, cell]:
+		if not session.level.is_inside(candidate):
+			continue
+		if session.level.robot_at(candidate) != -1:
+			return candidate
+		if session.level.item_at(candidate) != GridTypes.NO_ITEM:
+			return candidate
+		if session.level.block_at(candidate) != GridTypes.BlockType.EMPTY \
+				and not GridTypes.is_solid(session.level.block_at(candidate)):
+			return candidate
+	return cell
+
+func _erase_at(cell: Vector3i, place_cell: Vector3i) -> void:
+	cell = _erase_target_cell(cell, place_cell)
 	if not session.level.is_inside(cell):
 		return
 	var robot_index := session.level.robot_at(cell)

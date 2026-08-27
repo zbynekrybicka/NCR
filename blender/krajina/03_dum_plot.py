@@ -67,6 +67,13 @@ WINDOW_X = (-2.8, 2.8)
 WINDOW_SIZE = (1.0, 1.2)
 WINDOW_SILL = 1.1
 WINDOW_FRAME = 0.08
+# stěna je plná krychle bez díry, takže líc rámu i skla splývá s lícem
+# zdi (y=0) a při renderu to bliká (z-fighting). Tahle deska sedí kousek
+# před nimi, jiných rozměrů, takže se s nikým nekryje, a zároveň dělá dojem
+# tmy uvnitř domu.
+WINDOW_DARK_SIZE = (0.82, 1.02)
+WINDOW_DARK_DEPTH = 0.02
+WINDOW_DARK_FRONT = 0.03
 
 # --- plot a branka (kap. 5.2) -----------------------------------------------
 
@@ -154,7 +161,11 @@ def _build_house(coll):
                         (WINDOW_SIZE[0] - 0.10, 0.02, WINDOW_SIZE[1] - 0.10),
                         loc=(wx, HOUSE_Y[1] - 0.01, win_cz),
                         coll=coll, material=C.get_material("sklo"))
-        windows.append(nc.join([frame, glass], "A_dum_okno_%d" % i))
+        dark = nc.box("A_dum_okno_tma_%d" % i,
+                       (WINDOW_DARK_SIZE[0], WINDOW_DARK_DEPTH, WINDOW_DARK_SIZE[1]),
+                       loc=(wx, HOUSE_Y[1] + WINDOW_DARK_FRONT - WINDOW_DARK_DEPTH * 0.5, win_cz),
+                       coll=coll, material=C.get_material("interier_tma"))
+        windows.append(nc.join([frame, glass, dark], "A_dum_okno_%d" % i))
 
     # okap podél okapové hrany + jeden svod
     eave_beam = nc.box("A_dum_okap", (width + 0.1, 0.08, 0.08),

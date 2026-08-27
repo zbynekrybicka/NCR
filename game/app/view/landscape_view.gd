@@ -43,6 +43,29 @@ const SURFACE_TEXTURES := {
 }
 const TEXTURE_TILE_SIZE := 2.0   ## metrů světa na jedno opakování textury
 
+## Černé desky za okny domu proti z-fightingu zdi/rámu/skla (blender/krajina/
+## 03_dum_plot.py, WINDOW_DARK_*) — krajina.glb je poslední dobou beze změny
+## (nešlo reexportovat/reimportovat), takže je oprava zrcadlená přímo tady.
+## Souřadnice přepočtené z Blenderu (X, Z, -Y — standardní glTF/Godot osy,
+## ověřeno na translaci A_dum_okno_0/1 v krajina.glb, T.y=1.700982): wx
+## zůstává, Godot Y = Blender Z (z0 + WINDOW_SILL + WINDOW_SIZE.y/2),
+## Godot Z = -(HOUSE_Y[1] + WINDOW_DARK_FRONT - WINDOW_DARK_DEPTH/2) = -0.02.
+const WINDOW_DARK_X := [-2.8, 2.8]
+const WINDOW_DARK_Y := 1.700982
+const WINDOW_DARK_Z := -0.02
+## O trochu větší než sklo (0.90 × 1.10 v Blenderu) — plně ho tím zakryje,
+## takže odpadá i lesklá/"svítící" plocha skla (KRAJ_sklo, metallic 0.9) a
+## její vlastní blikání proti rámu, ne jen zeď pod tím.
+const WINDOW_DARK_SIZE := Vector3(0.94, 1.14, 0.02)   ## (šířka, výška, tloušťka)
+
+## Rám i sklo domovních oken (jeden spojený mesh z Blenderu, "A_dum_okno_*")
+## leží přesně v rovině fasády stejně jako zeď pod nimi -> blikání. Celý uzel
+## se posune o kousek dopředu (Godot -Z, směrem od domu), aby se roviny
+## rozešly; deska výš (WINDOW_DARK_*) pak zajistí, že zůstane před rámem, ne
+## naopak.
+const WINDOW_FRAME_NAMES := ["A_dum_okno_0", "A_dum_okno_1", "A_dum_dvere"]
+const WINDOW_FRAME_FORWARD := 0.02
+
 signal landscape_ready(found: bool)
 
 var instance: Node3D
@@ -56,6 +79,8 @@ func _ready() -> void:
 	instance = packed.instantiate()
 	_apply_surface_textures(instance)
 	add_child(instance)
+	_move_window_frames_forward(instance)
+	_add_window_dark_panels(instance)
 	landscape_ready.emit(true)
 
 ## Nahradí materiály podle jména jejich texturovanou variantou
@@ -95,3 +120,26 @@ func _textured_variant(source: Material, texture_path: String) -> Material:
 	base.uv1_world_triplanar = true
 	base.uv1_scale = Vector3.ONE / TEXTURE_TILE_SIZE
 	return base
+
+## Viz WINDOW_FRAME_* výše — posune celý uzel rámu+skla dopředu od fasády.
+func _move_window_frames_forward(root: Node3D) -> void:
+	for frame_name in WINDOW_FRAME_NAMES:
+		var node := root.find_child(frame_name, true, false)
+		if node is Node3D:
+			node.position.z -= WINDOW_FRAME_FORWARD
+
+## Viz WINDOW_DARK_* výše — dvě desky přidané do stromu ručně, mimo geometrii
+## z .glb, aby se neshodovaly žádnou plochou se zdí/rámem/sklem okna.
+func _add_window_dark_panels(root: Node3D) -> void:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.051, 0.051, 0.051)   # #0D0D0D, KRAJ_interier_tma
+	material.roughness = 0.95
+	for i in WINDOW_DARK_X.size():
+		var box := BoxMesh.new()
+		box.size = WINDOW_DARK_SIZE
+		var mesh_instance := MeshInstance3D.new()
+		mesh_instance.name = "A_dum_okno_tma_%d" % i
+		mesh_instance.mesh = box
+		mesh_instance.material_override = material
+		mesh_instance.position = Vector3(WINDOW_DARK_X[i], WINDOW_DARK_Y, WINDOW_DARK_Z)
+		root.add_child(mesh_instance)
