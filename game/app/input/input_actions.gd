@@ -25,12 +25,18 @@ const DEFAULTS := {
 	STEP: [KEY_W, KEY_UP],
 	STEP_UP: [KEY_SPACE, KEY_PAGEUP],
 	STEP_DOWN: [KEY_SHIFT, KEY_PAGEDOWN],
-	ACTION_1: [KEY_Q],
-	ACTION_2: [KEY_E],
+	ACTION_1: [KEY_E],
+	ACTION_2: [KEY_Q],
 	SWITCH_ROBOT: [KEY_TAB],
 	CAMERA_FIRST_PERSON: [KEY_F],
 	RESTART_LEVEL: [KEY_R],
 	SKIP_ANIMATION: [KEY_ESCAPE],
+}
+
+## akce -> seznam tlačítek gamepadu (JoyButton)
+const GAMEPAD_DEFAULTS := {
+	ACTION_1: [JOY_BUTTON_A],
+	ACTION_2: [JOY_BUTTON_B],
 }
 
 ## Mapování akce → příkaz simulace. Vstupní vrstva pravidla nezná (P1, P5) —
@@ -62,4 +68,11 @@ static func register_defaults() -> void:
 		for keycode in DEFAULTS[action]:
 			var event := InputEventKey.new()
 			event.physical_keycode = keycode
+			InputMap.action_add_event(action, event)
+	for action in GAMEPAD_DEFAULTS.keys():
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+		for button in GAMEPAD_DEFAULTS[action]:
+			var event := InputEventJoypadButton.new()
+			event.button_index = button
 			InputMap.action_add_event(action, event)
