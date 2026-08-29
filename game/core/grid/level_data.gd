@@ -22,6 +22,18 @@ var level_name: String = ""
 var author: String = ""
 var created_unix: int = 0
 
+## Úvodní přelet kamery (§2.1.1, §2.2.1) — souřadnice v místní mřížce
+## levelu, stejně jako vše ostatní v LevelData; při umístění levelu do
+## krajiny je přepočítá až LevelController (§7.2 import-assets.md).
+var has_intro_camera: bool = false
+var intro_camera_eye: Vector3 = Vector3.ZERO
+var intro_camera_target: Vector3 = Vector3.ZERO
+
+## Úvodní textová zpráva (§2.1.1, §2.2.1) — prostý text, odstavce oddělené
+## prázdným řádkem, bez dalšího formátování. Prázdný řetězec = level žádnou
+## zprávu nemá.
+var intro_text: String = ""
+
 
 class ItemPlacement extends RefCounted:
 	var item_type: int
@@ -203,6 +215,10 @@ func duplicate_level() -> LevelData:
 	copy.level_name = level_name
 	copy.author = author
 	copy.created_unix = created_unix
+	copy.has_intro_camera = has_intro_camera
+	copy.intro_camera_eye = intro_camera_eye
+	copy.intro_camera_target = intro_camera_target
+	copy.intro_text = intro_text
 	for it in items:
 		copy.items.append(it.duplicate_placement())
 	for r in robots:

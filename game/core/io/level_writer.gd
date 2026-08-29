@@ -18,6 +18,8 @@ static func to_bytes(level: LevelData) -> PackedByteArray:
 	chunks.append(["PLAT", _chunk_platforms(level)])
 	chunks.append(["PUMP", _chunk_pumps(level)])
 	chunks.append(["META", _chunk_meta(level)])
+	chunks.append(["ICAM", _chunk_intro_camera(level)])
+	chunks.append(["DESC", _chunk_intro_text(level)])
 
 	var stream := StreamPeerBuffer.new()
 	stream.put_data(MAGIC.to_ascii_buffer())
@@ -156,6 +158,28 @@ static func _chunk_meta(level: LevelData) -> PackedByteArray:
 	_put_string(stream, level.author)
 	stream.put_u32(level.created_unix)
 	return stream.data_array
+
+## Úvodní přelet kamery (§2.1.1); souřadnice v místní mřížce levelu. Bez
+## uložené pozice (`has_intro_camera` == false) se eye/target ani nezapisují.
+static func _chunk_intro_camera(level: LevelData) -> PackedByteArray:
+	var stream := StreamPeerBuffer.new()
+	stream.put_u8(1 if level.has_intro_camera else 0)
+	if level.has_intro_camera:
+		_put_vector3(stream, level.intro_camera_eye)
+		_put_vector3(stream, level.intro_camera_target)
+	return stream.data_array
+
+## Úvodní textová zpráva (§2.1.1); prázdný řetězec (délka 0) znamená, že
+## level žádnou zprávu nemá.
+static func _chunk_intro_text(level: LevelData) -> PackedByteArray:
+	var stream := StreamPeerBuffer.new()
+	_put_string(stream, level.intro_text)
+	return stream.data_array
+
+static func _put_vector3(stream: StreamPeerBuffer, v: Vector3) -> void:
+	stream.put_float(v.x)
+	stream.put_float(v.y)
+	stream.put_float(v.z)
 
 static func _put_cell(stream: StreamPeerBuffer, cell: Vector3i) -> void:
 	stream.put_u16(cell.x)

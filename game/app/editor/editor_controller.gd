@@ -121,6 +121,10 @@ func _connect_ui() -> void:
 	ui.play_pressed.connect(_on_play)
 	ui.menu_pressed.connect(func(): menu_requested.emit())
 	ui.world_placement_requested.connect(_on_world_placement_requested)
+	ui.save_camera_position_requested.connect(_on_save_camera_position)
+	ui.clear_camera_position_requested.connect(_on_clear_camera_position)
+	ui.intro_text_edit_requested.connect(func(): ui.open_intro_text_dialog(session.level.intro_text))
+	ui.intro_text_changed.connect(_on_intro_text_changed)
 
 func _process(_delta: float) -> void:
 	if not _active:
@@ -418,6 +422,28 @@ func _on_new_level(size: Vector3i) -> void:
 	view.show_level(session.level)
 	camera.center_on(session.level)
 	_refresh_status()
+
+# ── Úvodní pozice kamery (§2.1.1, §2.2.1) ───────────────────────────────────
+
+## Uloží aktuální pohled editorové kamery jako úvodní pozici pro intro přelet
+## při spuštění levelu — přímá změna dat bez undo/redo, stejně jako
+## level_name/author (jde o kosmetickou metadatu, ne o mřížku samotnou).
+func _on_save_camera_position() -> void:
+	session.level.has_intro_camera = true
+	session.level.intro_camera_eye = camera.camera.global_position
+	session.level.intro_camera_target = camera.target
+	ui.set_status("Pozice kamery pro úvodní přelet uložena.")
+
+func _on_clear_camera_position() -> void:
+	session.level.has_intro_camera = false
+	ui.set_status("Uložená pozice kamery zrušena — level bude spouštět bez intro přeletu.")
+
+## Uloží úvodní textovou zprávu — přímá změna dat bez undo/redo, stejně jako
+## pozice úvodní kamery výše.
+func _on_intro_text_changed(text: String) -> void:
+	session.level.intro_text = text
+	ui.set_status("Úvodní text uložen." if text.strip_edges() != "" \
+			else "Úvodní text zrušen — level bude spouštět bez zprávy.")
 
 # ── Umístění ve světě (§7.3 import-assets.md) ───────────────────────────────
 

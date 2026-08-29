@@ -119,7 +119,9 @@ Základní hmotnost je 2. Inspirovaný astrodroidem R2-D2, disponuje pájecím z
 
 Level se zahajuje načtením informací o levelu ze souboru (viz [Formát uložení levelu](#222-levely-a-jejich-původ)). Podle nich se umístí všechny prvky, které scéna obsahuje, na své pozice — včetně robotů. Kamera se poté zaměří na prvního aktivního robota; pořadí/identita prvního aktivního robota je rovněž součástí definice levelu.
 
-> ⚠️ *Nedokončeno:* případné intro/cutscény při zahájení levelu nejsou řešeny.
+**Úvodní přelet kamery** — Level může mít v souboru uloženou volitelnou úvodní pozici kamery (nastavuje se v editoru, viz [Ovládací panel](#221-ovládací-panel)). Má-li ji, hra mezi načtením levelu a začátkem hraní vloží krátkou intro animaci: kamera se nejdřív umístí přesně do uložené pozice a poté se během tří sekund plynule přesune do výchozí herní pozice, ve které už sleduje prvního aktivního robota (viz výše) — tou přelet končí a hra pokračuje běžným způsobem. Po dobu přeletu je ovládání uzamčené (nelze zadávat příkazy ani otáčet kamerou), stejně jako během přehrávání animace kroku (viz [2.1.2](#212-řízené-prvky--roboti)); přelet lze stejnou klávesou přeskočit. Nemá-li level úvodní pozici uloženou, žádná intro animace se nekoná a hra začíná rovnou pohledem na prvního robota.
+
+**Úvodní textová zpráva** — Level může mít v souboru uloženou i volitelnou úvodní textovou zprávu (nastavuje se v editoru, viz [Ovládací panel](#221-ovládací-panel)) — prostý text bez zvýraznění, kde se odstavce oddělují prázdným řádkem. Má-li ji, zobrazí se hráči ihned po příjezdu kamery na její výchozí pozici, tj. po skončení úvodního přeletu (viz výše), nebo hned na začátku levelu, který žádný přelet nemá. Zpráva se objeví zacentrovaná na obrazovce na poloprůsvitném pozadí orámovaném černým rámem o tloušťce 5 px a zavírá se klávesou Enter nebo tlačítkem "Zavřít". Po dobu zobrazení je ovládání uzamčené stejně jako během přeletu kamery. Nemá-li level zprávu uloženou, žádná se nezobrazí a hra pokračuje rovnou.
 
 **Kamera**
 
@@ -272,6 +274,10 @@ Jedno sepnutí přečerpá **100 % obsahu zdrojové nádrže** do cílové — n
 
 **Umístění robotů** — Do levelu lze umístit 1 až 7 robotů dle výběru, včetně pozice a směru. Umístění je možné pouze na zem nebo plochou zeď; Dul může být umístěn i ve vodě.
 
+**Úvodní pozice kamery** — Autor levelu může v editoru (v běžném režimu umisťování do mřížky, ne v režimu umístění levelu do krajiny, viz [2.2.2](#222-levely-a-jejich-původ)) nastavit pohled volné editorové kamery a tlačítkem jej uložit jako úvodní pozici pro intro přelet při spuštění levelu (viz [Úvodní přelet kamery](#211-zahájení-levelu)). Uloženou pozici lze i zrušit — level pak žádnou intro animaci nemá. Uložená pozice je součástí souboru levelu.
+
+**Úvodní textová zpráva** — Tlačítkem v ovládacím panelu jde otevřít textové pole, do kterého autor napíše prostý text (odstavce odděl prázdným řádkem) zobrazený hráči po příjezdu kamery na začátku levelu (viz [Úvodní textová zpráva](#211-zahájení-levelu)). Prázdné pole znamená, že level žádnou zprávu nemá. Text je součástí souboru levelu.
+
 #### 2.2.2 Levely a jejich původ
 
 Od verze 0.1.0 je editor součástí hry. Levely do oficiální hry nejsou dodávány předem navrženou sadou — vznikají v editoru (autorem nebo přáteli) a z takto vytvořených levelů se následně vybírají ty, které se stanou součástí oficiální hry. Počet a struktura levelů proto nejsou v této fázi vývoje relevantní a nejsou touto specifikací určovány.
@@ -286,7 +292,7 @@ Seznam částí, které dokument v aktuální podobě neřeší a je třeba je d
 
 - [x] ~~Doplnit konkrétní rozhodovací strom (behavior tree) pro krok robota Dula po souši/vodě~~ — pravidla kroku jsou doplněná v [1.1.2 Dul](#112-vodní--dul) (vstup do vody a výlez z ní včetně tolerance a rozhraní s ledem) a strom podle nich existuje.
 - [ ] Doplnit konkrétní rozhodovací stromy jednotlivých robotů pro krok obecně (viz [2.1.2](#212-řízené-prvky--roboti)) — dodá autor postupně.
-- [ ] Zahájení levelu — případné intro/cutscény (základní postup načtení a kamera už jsou popsané v [2.1.1](#211-zahájení-levelu)).
+- [x] ~~Zahájení levelu — případné intro/cutscény~~ — úvodní přelet kamery z volitelné uložené pozice je popsaný v [2.1.1](#211-zahájení-levelu) a [2.2.1](#221-ovládací-panel).
 - [ ] Scéna výběru/přepínání aktivního robota — logika (sekvence, klávesa Tab, klik v UI, podmínka bezpečí) je popsaná v [2.1.2](#212-řízené-prvky--roboti); vizuální stránka (podoba UI panelu s roboty) řešena až v 0.2.0.
 - [ ] Konkrétní bajtová struktura a verzování binárního formátu levelu (viz [2.2.2](#222-levely-a-jejich-původ)) — až bude aktuální pro implementaci editoru/runtime.
 

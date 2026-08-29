@@ -19,6 +19,10 @@ signal new_level_requested(size: Vector3i)
 signal play_pressed
 signal menu_pressed
 signal world_placement_requested
+signal save_camera_position_requested
+signal clear_camera_position_requested
+signal intro_text_edit_requested
+signal intro_text_changed(text: String)
 
 # Mechanismy (§13): zařízení, nádrže, plošiny, čerpadla.
 signal device_tool_selected(kind: int)
@@ -97,6 +101,8 @@ var _pump_cabinets: ItemList
 var _pump_unit: OptionButton
 var _list_dialog: AcceptDialog
 var _list_content: VBoxContainer
+var _intro_text_dialog: ConfirmationDialog
+var _intro_text_edit: TextEdit
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(LEVELS_DIR)
@@ -138,6 +144,9 @@ func _make_top_bar() -> Control:
 	_add_button(bar, "Znovu (Ctrl+Y)", func(): redo_pressed.emit())
 	_add_button(bar, "Otočit (R)", func(): rotate_pressed.emit())
 	_add_button(bar, "Umístit ve světě…", func(): world_placement_requested.emit())
+	_add_button(bar, "Uložit pozici kamery", func(): save_camera_position_requested.emit())
+	_add_button(bar, "Zrušit pozici kamery", func(): clear_camera_position_requested.emit())
+	_add_button(bar, "Úvodní text…", func(): intro_text_edit_requested.emit())
 	_add_button(bar, "Přehrát", func(): play_pressed.emit())
 	_add_button(bar, "Menu", func(): menu_pressed.emit())
 	return bar
@@ -302,6 +311,7 @@ func _build_dialogs() -> void:
 	_build_platform_dialog()
 	_build_pump_dialog()
 	_build_list_dialog()
+	_build_intro_text_dialog()
 
 # ── Dialogy mechanismů ───────────────────────────────────────────────────
 
@@ -453,6 +463,26 @@ func _add_list_group(title: String, kind: String, entries: Array) -> void:
 			mechanism_remove_requested.emit(kind, index)
 			_list_dialog.hide())
 		_list_content.add_child(row)
+
+## Úvodní textová zpráva (§2.1.1, §2.2.1): prostý text, odstavce oddělené
+## prázdným řádkem, bez dalšího formátování — proto obyčejný TextEdit, ne
+## RichTextLabel/editor s vyznačováním.
+func _build_intro_text_dialog() -> void:
+	_intro_text_dialog = ConfirmationDialog.new()
+	_intro_text_dialog.title = "Úvodní textová zpráva"
+	_intro_text_dialog.ok_button_text = "Uložit"
+	_intro_text_edit = TextEdit.new()
+	_intro_text_edit.custom_minimum_size = Vector2(480, 320)
+	_intro_text_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_intro_text_edit.placeholder_text = "Text zobrazený hráči po příjezdu kamery na začátku " \
+			+ "levelu. Odstavce odděl prázdným řádkem."
+	_intro_text_dialog.add_child(_intro_text_edit)
+	_intro_text_dialog.confirmed.connect(func(): intro_text_changed.emit(_intro_text_edit.text))
+	add_child(_intro_text_dialog)
+
+func open_intro_text_dialog(text: String) -> void:
+	_intro_text_edit.text = text
+	_intro_text_dialog.popup_centered(Vector2(520, 380))
 
 func _make_multi_list() -> ItemList:
 	var list := ItemList.new()

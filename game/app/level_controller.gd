@@ -10,6 +10,8 @@ var animator: EventAnimator
 var camera_rig: CameraRig
 var hud: Hud
 var landscape: LandscapeView
+var intro_flight: IntroCameraFlight
+var intro_text_overlay: IntroTextOverlay
 
 var input_locked: bool = false
 
@@ -61,7 +63,73 @@ func setup_with_simulation(p_simulation: Simulation, world_position: Variant = n
 	_focus_active_robot()
 	hud.show_state(simulation, "")
 
+	if simulation.level.has_intro_camera:
+		_start_intro_flight(world_position)
+	else:
+		_maybe_show_intro_text()
+
+## Úvodní přelet kamery (§2.1.1) z uložené pozice (v místní mřížce levelu,
+## viz LevelData) do pozice, kde by CameraRig už normálně stál a sledoval
+## prvního robota. `world_position` je stejná transformace jako pro WorldView
+## výše — level zasazený do krajiny je zmenšený a posunutý, takže uložená
+## pozice kamery se musí přepočítat stejně jako celá scéna.
+func _start_intro_flight(world_position: Variant) -> void:
+	var from_eye := _level_point_to_world(simulation.level.intro_camera_eye, world_position)
+	var from_target := _level_point_to_world(simulation.level.intro_camera_target, world_position)
+	var resting := camera_rig.resting_transform()
+
+	camera_rig.set_process(false)
+	camera_rig.set_process_unhandled_input(false) # jinak by orbit myší za letu tajně měnil yaw/pitch/zoom
+	input_locked = true
+	intro_flight = IntroCameraFlight.new()
+	add_child(intro_flight)
+	intro_flight.finished.connect(_on_intro_flight_finished)
+	intro_flight.start(camera_rig.camera, from_eye, from_target, resting["eye"], resting["target"])
+
+func _level_point_to_world(point: Vector3, world_position: Variant) -> Vector3:
+	if world_position == null:
+		return point
+	return (world_position as Vector3) + point * LEVEL_SCALE_IN_WORLD
+
+func _on_intro_flight_finished() -> void:
+	intro_flight.queue_free()
+	intro_flight = null
+	_maybe_show_intro_text()
+
+## Úvodní textová zpráva (§2.1.1) — zobrazí se po příjezdu kamery, tj. hned
+## po dokončení intro přeletu, nebo hned na začátku levelu, který žádný
+## přelet nemá. Beze zprávy (`intro_text` prázdný) se rovnou odemkne vstup.
+func _maybe_show_intro_text() -> void:
+	if simulation.level.intro_text.strip_edges() == "":
+		_unlock_input()
+		return
+	input_locked = true
+	camera_rig.set_process(false)
+	camera_rig.set_process_unhandled_input(false)
+	intro_text_overlay = IntroTextOverlay.new()
+	add_child(intro_text_overlay)
+	intro_text_overlay.closed.connect(_on_intro_text_closed)
+	intro_text_overlay.show_text(simulation.level.intro_text)
+
+func _on_intro_text_closed() -> void:
+	intro_text_overlay.queue_free()
+	intro_text_overlay = null
+	_unlock_input()
+
+func _unlock_input() -> void:
+	camera_rig.set_process(true)
+	camera_rig.set_process_unhandled_input(true)
+	input_locked = false
+
 func _unhandled_input(_event: InputEvent) -> void:
+	if intro_text_overlay != null:
+		return
+	if intro_flight != null and intro_flight.is_playing():
+		if Input.is_action_just_pressed(InputActions.SKIP_ANIMATION):
+			intro_flight.skip()
+		return
+	if input_locked:
+		return
 	if Input.is_action_just_pressed(InputActions.SKIP_ANIMATION):
 		animator.skip()
 		return

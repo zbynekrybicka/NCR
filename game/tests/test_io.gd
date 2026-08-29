@@ -20,6 +20,10 @@ func _sample_level() -> LevelData:
 	level.level_name = "Zkušební level"
 	level.author = "Zbyněk"
 	level.created_unix = 1770000000
+	level.has_intro_camera = true
+	level.intro_camera_eye = Vector3(1.5, 4.0, -3.25)
+	level.intro_camera_target = Vector3(2.0, 1.0, 1.0)
+	level.intro_text = "První odstavec.\n\nDruhý odstavec zprávy."
 	return level
 
 func test_round_trip() -> void:
@@ -53,6 +57,25 @@ func test_round_trip() -> void:
 	t.equal(back.level_name, "Zkušební level", "název levelu (UTF-8)")
 	t.equal(back.author, "Zbyněk", "autor (UTF-8)")
 	t.equal(back.created_unix, 1770000000, "čas vytvoření")
+	t.is_true(back.has_intro_camera, "příznak úvodní pozice kamery")
+	t.equal(back.intro_camera_eye, Vector3(1.5, 4.0, -3.25), "pozice oka úvodní kamery")
+	t.equal(back.intro_camera_target, Vector3(2.0, 1.0, 1.0), "cíl pohledu úvodní kamery")
+	t.equal(back.intro_text, "První odstavec.\n\nDruhý odstavec zprávy.",
+			"úvodní text (odstavce, UTF-8)")
+
+func test_intro_camera_defaults_to_absent() -> void:
+	var level := _sample_level()
+	level.has_intro_camera = false
+	var result := LevelReader.from_bytes(LevelWriter.to_bytes(level), false)
+	t.is_true(result.ok, "soubor se načetl: " + result.error)
+	t.is_false(result.level.has_intro_camera, "bez uložené pozice se příznak nenastaví")
+
+func test_intro_text_defaults_to_empty() -> void:
+	var level := _sample_level()
+	level.intro_text = ""
+	var result := LevelReader.from_bytes(LevelWriter.to_bytes(level), false)
+	t.is_true(result.ok, "soubor se načetl: " + result.error)
+	t.equal(result.level.intro_text, "", "bez uloženého textu je pole prázdné")
 
 func test_corrupted_file_is_rejected() -> void:
 	var bytes := LevelWriter.to_bytes(_sample_level())

@@ -181,9 +181,19 @@ static func _read_chunk(level: LevelData, chunk_id: String, payload: PackedByteA
 			level.level_name = _get_string(stream)
 			level.author = _get_string(stream)
 			level.created_unix = stream.get_u32()
+		"ICAM":
+			level.has_intro_camera = stream.get_u8() != 0
+			if level.has_intro_camera:
+				level.intro_camera_eye = _get_vector3(stream)
+				level.intro_camera_target = _get_vector3(stream)
+		"DESC":
+			level.intro_text = _get_string(stream)
 		_:
 			pass # neznámý chunk se přeskočí — dopředná kompatibilita
 	return ""
+
+static func _get_vector3(stream: StreamPeerBuffer) -> Vector3:
+	return Vector3(stream.get_float(), stream.get_float(), stream.get_float())
 
 static func _get_cell(stream: StreamPeerBuffer) -> Vector3i:
 	return Vector3i(stream.get_u16(), stream.get_u16(), stream.get_u16())

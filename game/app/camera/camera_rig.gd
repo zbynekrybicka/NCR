@@ -73,15 +73,26 @@ func _unhandled_input(event: InputEvent) -> void:
 			_distance = clampf(_distance + 0.5 * level_scale, _min_distance, _max_distance)
 
 func _process(_delta: float) -> void:
+	if not first_person:
+		var resting := resting_transform()
+		camera.global_position = resting["eye"]
+		camera.look_at(resting["target"], Vector3.UP)
+		return
 	if _followed_robot != null and is_instance_valid(_followed_robot):
 		_target = _followed_robot.global_position
-	if first_person:
-		camera.global_position = _target
-		camera.rotation = Vector3(_pitch * 0.5, _yaw, 0.0)
-		return
+	camera.global_position = _target
+	camera.rotation = Vector3(_pitch * 0.5, _yaw, 0.0)
+
+## Kam by kamera v tomto okamžiku mířila v běžném (ne first-person) režimu —
+## bez vedlejších účinků na `_target`, aby to šlo spočítat i dřív, než
+## CameraRig vůbec dostane první `_process` (viz IntroCameraFlight, kam se
+## tahle hodnota předává jako cílový bod přeletu).
+func resting_transform() -> Dictionary:
+	var target := _target
+	if _followed_robot != null and is_instance_valid(_followed_robot):
+		target = _followed_robot.global_position
 	var direction := Vector3(
 		cos(_pitch) * sin(_yaw),
 		-sin(_pitch),
 		cos(_pitch) * cos(_yaw))
-	camera.global_position = _target + direction * _distance
-	camera.look_at(_target, Vector3.UP)
+	return {"eye": target + direction * _distance, "target": target}
