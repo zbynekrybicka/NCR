@@ -33,6 +33,22 @@ var _to_yaw: float = 0.0
 var _node: Node3D
 var _robot: RobotView
 
+## Řetěz šikmin dolů (vícepatrové schodiště, viz _start) — dokud
+## `_ramp_chain_robot` sedí na aktuálním robotovi, jede se svah, který
+## začal o jednu událost dřív. -1, když žádný sjezd neprobíhá.
+##
+## Na šikmině nelze setrvat (design dok. §2.1.4), takže jeden vizuální sjezd
+## je vždy nejmíň dvě simulační události: DOWN_RAMP (na blok rampy) a
+## dosednutí (FORWARD, nebo další DOWN_RAMP u schodiště). Cílová výška
+## události DOWN_RAMP ale odpovídá středu rampové kostky — poloviční sklon
+## uprostřed jejího svahu, ne úpatí. Proto se pád o jednu kostku schválně
+## odloží na NÁSLEDUJÍCÍ událost (`_ramp_pending_y`): událost DOWN_RAMP jede
+## vodorovně (ve výšce, odkud vyjela), a teprve další událost — ať už
+## dosednutí, nebo další patro schodiště — sjede tu odloženou kostku šikmo
+## dolů, protože JEJÍ vlastní cílová výška už s odloženým pádem počítá.
+var _ramp_chain_robot: int = -1
+var _ramp_pending_y: float = 0.0
+
 func is_playing() -> bool:
 	return _playing or not _queue.is_empty()
 
@@ -82,18 +98,36 @@ func _next() -> void:
 func _start(event: Event) -> bool:
 	match event.type:
 		Event.EventType.ROBOT_MOVED:
-			_node = view.robot_node(int(event.data["robot"]))
+			var robot_index := int(event.data["robot"])
+			_node = view.robot_node(robot_index)
 			if _node == null:
 				return false
-			_robot = view.robot_view(int(event.data["robot"]))
+			_robot = view.robot_view(robot_index)
 			_from = _node.position
-			_to = WorldView.cell_to_position(event.data["to"])
+			var target := WorldView.cell_to_position(event.data["to"])
 			_from_yaw = _node.rotation.y
 			_to_yaw = _node.rotation.y
-			_begin(STEP_TIME)
-			_play_clips(MOVE_CLIPS.get(int(event.data["substep"]), []))
+			var substep := int(event.data["substep"])
+			if substep == GridTypes.Substep.DOWN_RAMP:
+				if _ramp_chain_robot != robot_index:
+					# První šikmina sjezdu — pád se teprve začíná odkládat.
+					_ramp_pending_y = _from.y
+				_to = Vector3(target.x, _ramp_pending_y, target.z)
+				_begin(STEP_TIME)
+				_ramp_pending_y = target.y
+				_ramp_chain_robot = robot_index
+			else:
+				# Dosednutí po sjezdu (nebo běžná chůze) použije svůj vlastní
+				# cíl beze změny — pokud navazuje na řetěz šikmin, `_from` je
+				# pořád ve výšce před odloženým pádem, takže tenhle úsek vyjde
+				# jako čistá 45° šikmina dolů do správné výšky.
+				_to = target
+				_begin(STEP_TIME)
+				_ramp_chain_robot = -1
+			_play_clips(MOVE_CLIPS.get(substep, []), STEP_TIME)
 			return true
 		Event.EventType.ROBOT_TURNED:
+			_ramp_chain_robot = -1
 			_node = view.robot_node(int(event.data["robot"]))
 			if _node == null:
 				return false
@@ -104,7 +138,7 @@ func _start(event: Event) -> bool:
 			_to_yaw = WorldView.facing_to_yaw(int(event.data["to_dir"]))
 			_begin(TURN_TIME)
 			_play_clips(_turn_clips(int(event.data["from_dir"]),
-					int(event.data["to_dir"])))
+					int(event.data["to_dir"])), TURN_TIME)
 			return true
 		Event.EventType.ROBOT_ENTERED_TARGET:
 			var node := view.robot_node(int(event.data["robot"]))
@@ -144,10 +178,10 @@ func _begin(duration: float) -> void:
 
 ## Klip se roztahuje na dobu události, ne naopak (§6.3): tempo hry je herní
 ## rozhodnutí, ne důsledek toho, kolik snímků měl klip v Blenderu.
-func _play_clips(clips: Array) -> void:
+func _play_clips(clips: Array, duration: float) -> void:
 	if _robot == null or clips.is_empty():
 		return
-	_robot.play_action(PackedStringArray(clips), _duration)
+	_robot.play_action(PackedStringArray(clips), duration)
 
 ## Směr otáčky z rozdílu světových stran. Klipy jsou pojmenované z pohledu
 ## robota (blender/net/anim_walk.py), takže NORTH -> EAST je `turn_right`.
