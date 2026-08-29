@@ -17,9 +17,16 @@ const MOVE_CLIPS := {
 	GridTypes.Substep.FORWARD: ["walk"],
 	GridTypes.Substep.UP_RAMP: ["walk_ramp_up", "walk"],
 	GridTypes.Substep.DOWN_RAMP: ["walk_ramp_down", "walk"],
-	GridTypes.Substep.UP_VERTICAL: ["climb_up", "fly_up"],
-	GridTypes.Substep.DOWN_VERTICAL: ["climb_down", "fly_down"],
+	# Net nemá vlastní klip na šplhání — venku ho napřímí `_target_pitch()`
+	# na 90° a stejný `walk` klip mu pak nohama "kráčí" po stěně vzhůru/dolů.
+	GridTypes.Substep.UP_VERTICAL: ["climb_up", "fly_up", "walk"],
+	GridTypes.Substep.DOWN_VERTICAL: ["climb_down", "fly_down", "walk"],
 }
+
+## Náklon Neta při šplhání (§1.1.4 design dok.) — kladná rotace kolem
+## lokální X naklápí příď od vodorovné (-Z) směrem k +Y, tedy nahoru.
+const NET_PITCH_UP := PI / 2.0
+const NET_PITCH_DOWN := -PI / 2.0
 
 var view: WorldView
 var _queue: Array = []
@@ -30,8 +37,14 @@ var _from := Vector3.ZERO
 var _to := Vector3.ZERO
 var _from_yaw: float = 0.0
 var _to_yaw: float = 0.0
+var _from_pitch: float = 0.0
+var _to_pitch: float = 0.0
 var _node: Node3D
 var _robot: RobotView
+
+## Aktuální náklon (§1.1.4) podle indexu robota — mimo šplhání Neta zůstává
+## u všech na 0.0 a slovník se pro ně nikdy nezaplní.
+var _pitch: Dictionary = {}
 
 ## Řetěz šikmin dolů (vícepatrové schodiště, viz _start) — dokud
 ## `_ramp_chain_robot` sedí na aktuálním robotovi, jede se svah, který
@@ -76,11 +89,13 @@ func _process(delta: float) -> void:
 	if _node != null and is_instance_valid(_node):
 		_node.position = _from.lerp(_to, ratio)
 		_node.rotation.y = lerp_angle(_from_yaw, _to_yaw, ratio)
+		_node.rotation.x = lerp_angle(_from_pitch, _to_pitch, ratio)
 
 func _finish_current() -> void:
 	if _node != null and is_instance_valid(_node):
 		_node.position = _to
 		_node.rotation.y = _to_yaw
+		_node.rotation.x = _to_pitch
 	if _robot != null and is_instance_valid(_robot):
 		_robot.settle()
 	_playing = false
@@ -108,6 +123,9 @@ func _start(event: Event) -> bool:
 			_from_yaw = _node.rotation.y
 			_to_yaw = _node.rotation.y
 			var substep := int(event.data["substep"])
+			_from_pitch = _pitch.get(robot_index, 0.0)
+			_to_pitch = _target_pitch(_robot, substep, event.data["to"])
+			_pitch[robot_index] = _to_pitch
 			if substep == GridTypes.Substep.DOWN_RAMP:
 				if _ramp_chain_robot != robot_index:
 					# První šikmina sjezdu — pád se teprve začíná odkládat.
@@ -128,14 +146,19 @@ func _start(event: Event) -> bool:
 			return true
 		Event.EventType.ROBOT_TURNED:
 			_ramp_chain_robot = -1
-			_node = view.robot_node(int(event.data["robot"]))
+			var turned_robot_index := int(event.data["robot"])
+			_node = view.robot_node(turned_robot_index)
 			if _node == null:
 				return false
-			_robot = view.robot_view(int(event.data["robot"]))
+			_robot = view.robot_view(turned_robot_index)
 			_from = _node.position
 			_to = _node.position
 			_from_yaw = _node.rotation.y
 			_to_yaw = WorldView.facing_to_yaw(int(event.data["to_dir"]))
+			# Otočka na místě náklon ze šplhání nemění (§1.1.4) — mění se jen
+			# na dalším pohybu pryč ze stěny.
+			_from_pitch = _pitch.get(turned_robot_index, 0.0)
+			_to_pitch = _from_pitch
 			_begin(TURN_TIME)
 			_play_clips(_turn_clips(int(event.data["from_dir"]),
 					int(event.data["to_dir"])), TURN_TIME)
@@ -170,6 +193,27 @@ func _start(event: Event) -> bool:
 			view.refresh_devices()
 			return false
 	return false
+
+## Cílový náklon pro daný substep (§1.1.4) — jen Net se naklápí, u ostatních
+## robotů (i když substep DOWN_VERTICAL sdílí s pádem vlivem gravitace,
+## viz gravity.gd) zůstává 0.0.
+##
+## Sešplhání nemá zvlášť "dosednutí": strom (net.json, větev `climb_down`)
+## poslední DOWN_VERTICAL rovnou ukončí přes `below_is_solid` → `succeed`,
+## bez dalšího substepu navrch. Proto se tady musí narovnat rovnou v tomhle
+## kroku, jakmile pod cílovou buňkou už je pevná podlaha — jinak by Net
+## zůstal viset nakloněný na zdi, i když už fakticky stojí na zemi.
+func _target_pitch(robot: RobotView, substep: int, to_cell: Vector3i) -> float:
+	if robot == null or robot.kind != GridTypes.RobotKind.NET:
+		return 0.0
+	match substep:
+		GridTypes.Substep.UP_VERTICAL:
+			return NET_PITCH_UP
+		GridTypes.Substep.DOWN_VERTICAL:
+			if view.world.has_support_below(to_cell):
+				return 0.0
+			return NET_PITCH_DOWN
+	return 0.0
 
 func _begin(duration: float) -> void:
 	_elapsed = 0.0

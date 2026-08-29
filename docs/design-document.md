@@ -70,6 +70,8 @@ Na stěně však nemůže zůstat viset. Před krokem představujícím šplhán
 
 Při šplhání směrem dolů se kontroluje, zda je možné sešplhat — stěna nesmí končit ve vzduchu ani ve vodě, pod ní musí být pevný podklad. Na šplhání dolů se nevztahuje limit počtu nesených předmětů — může slézt i se všemi čtyřmi, ale pak už nemůže nahoru, dokud je neodloží na dva nebo méně.
 
+Vizuál šplhání: nožičky se hýbou stejně jako při běžné chůzi po zemi. Při přechodu ze země na stěnu (šplhání nahoru) se Net na začátku pohybu natočí o 90° směrem vzhůru a po vyšplhání nahoru (přechod zpět na vodorovný podklad) se otočí zpátky. Obdobně při sestupu dolů ze stěny se na začátku otočí o 90° směrem dolů; po doslezení na pevnou zem (poslední krok sestupu, kdy už je pod ním podklad) se narovná zpátky do vodorovné polohy, jako by na cílové políčko přišel z vodorovného směru — nezůstává na zdi viset nakloněný.
+
 Sám nemůže nic stavět ani bořit — jedná se o pomocníka, který umí přinést, co je potřeba.
 
 **Akce 1:** Net neprovádí.
