@@ -159,6 +159,9 @@ const TARGET_LOCK_COLOR := Color(0.95, 0.80, 0.20, 0.28)
 
 var world: WorldState
 var _block_layers: Dictionary = {}   # BlockType -> MultiMeshInstance3D
+## Vector3i -> {"type": BlockType, "index": int} — kam refresh_blocks() dala
+## instanci dané buňky, ať ji EventAnimator umí najít a animovat (plošina).
+var _block_cell_index: Dictionary = {}
 var _robot_nodes: Array = []         # index robota -> RobotView
 var _item_nodes: Dictionary = {}     # Vector3i -> Node3D
 var _key_node: Node3D
@@ -273,6 +276,7 @@ func refresh_blocks() -> void:
 		positions[block].append(cell)
 
 	var ramp_has_model := ramp_mesh() != null
+	_block_cell_index.clear()
 	for block_type in _block_layers.keys():
 		var cells: Array = positions[block_type]
 		var instance: MultiMeshInstance3D = _block_layers[block_type]
@@ -288,8 +292,20 @@ func refresh_blocks() -> void:
 					offset = Vector3(0, -CELL_SIZE * 0.25, 0)
 			instance.multimesh.set_instance_transform(i,
 					Transform3D(basis, cell_to_position(cells[i]) + offset))
+			_block_cell_index[cells[i]] = {"type": block_type, "index": i}
 
 	refresh_targets()
+
+## Kde refresh_blocks() zrovna vykreslil danou buňku — prázdný slovník, když
+## na ní žádný typovaný blok není (EMPTY, nebo TARGET jako částice bokem).
+## Slouží jen event_animator.gd k rozjetí/dojetí animace přejezdu plošiny —
+## instance samotné jsou už na svém finálním místě, animátor je jen dočasně
+## odtáhne zpátky na start a nechá dojet přes _process().
+func block_multimesh_slot(cell: Vector3i) -> Dictionary:
+	if not _block_cell_index.has(cell):
+		return {}
+	var entry: Dictionary = _block_cell_index[cell]
+	return {"multimesh": _block_layers[entry["type"]].multimesh, "index": entry["index"]}
 
 ## Cíl nemá vlastní vrstvu v _block_layers (viz build()) — každá buňka s
 ## TARGET dostane svůj emitor částic, tady se jen dorovná podle aktuální
@@ -550,7 +566,7 @@ func refresh_devices() -> void:
 			continue
 		var device: DeviceState = world.devices[i]
 		var node: DeviceView = _device_nodes[i]
-		# Zařízení v kostce transportní plošiny jede s ní (devices.gd:157) —
+		# Zařízení v kostce transportní plošiny jede s ní (devices.gd:164) —
 		# dorovnat i pozici, ne jen stav, ať PLATFORM_MOVED nenechá zařízení viset.
 		node.position = cell_to_position(device.cell)
 		if device.kind == GridTypes.DeviceKind.POWER_CABINET:
@@ -613,3 +629,19 @@ func robot_node(index: int) -> Node3D:
 ## Totéž, jen typovaně — pro animace uvnitř modelu (import-assets §4.1).
 func robot_view(index: int) -> RobotView:
 	return robot_node(index) as RobotView
+
+## Pro EventAnimator (animace přejezdu plošiny) — uzly zůstávají stabilní
+## mezi refresh_devices() voláními, na rozdíl od _item_nodes/_key_node, které
+## refresh_items() při každém volání staví znovu (viz item_node()/key_node()).
+func device_node(index: int) -> Node3D:
+	return _device_nodes.get(index)
+
+## Uzel předmětu na dané buňce, pokud tam nějaký leží — volat AŽ PO
+## refresh_items(), protože ten uzly (znovu)staví.
+func item_node(cell: Vector3i) -> Node3D:
+	return _item_nodes.get(cell)
+
+## Uzel volně ležícího klíče, nebo null, když ho už někdo nese — stejně jako
+## item_node() platný až po refresh_items().
+func key_node() -> Node3D:
+	return _key_node

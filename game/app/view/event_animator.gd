@@ -9,6 +9,10 @@ signal finished
 
 const STEP_TIME := 0.35
 const TURN_TIME := 0.25
+## Přejezd transportní plošiny (§13.2) — pomalejší, "těžší" pohyb než krok
+## robota, a hlavně jednotný pro celý náklad (paluba, jezdci, klíč/předměty),
+## viz _start_platform_moved().
+const PLATFORM_TIME := 1.0
 
 ## Klipy uvnitř modelu robota podle substepu (§6.4). Bere se první, který
 ## model doopravdy má — kdo klip nemá, se jen posune. Krok po šikmině je pořád
@@ -41,6 +45,14 @@ var _from_pitch: float = 0.0
 var _to_pitch: float = 0.0
 var _node: Node3D
 var _robot: RobotView
+
+## "" = nic (mimo přehrávání), "single" = běžný _node/_robot pohyb výš,
+## "platform" = souběžná jízda více částí najednou, viz _platform_parts.
+var _mode: String = ""
+## Každá položka: {kind:"multimesh", multimesh, index, basis, from, to} pro
+## kostky paluby (MultiMesh instance), nebo {kind:"node", node, from, to} pro
+## roboty/zařízení/předměty/klíč — viz _start_platform_moved().
+var _platform_parts: Array = []
 
 ## Aktuální náklon (§1.1.4) podle indexu robota — mimo šplhání Neta zůstává
 ## u všech na 0.0 a slovník se pro ně nikdy nezaplní.
@@ -86,12 +98,23 @@ func _process(delta: float) -> void:
 		_next()
 		return
 	var ratio := _elapsed / _duration
+	if _mode == "platform":
+		for part in _platform_parts:
+			_apply_platform_part(part, ratio)
+		return
 	if _node != null and is_instance_valid(_node):
 		_node.position = _from.lerp(_to, ratio)
 		_node.rotation.y = lerp_angle(_from_yaw, _to_yaw, ratio)
 		_node.rotation.x = lerp_angle(_from_pitch, _to_pitch, ratio)
 
 func _finish_current() -> void:
+	if _mode == "platform":
+		for part in _platform_parts:
+			_apply_platform_part(part, 1.0)
+		_platform_parts.clear()
+		_mode = ""
+		_playing = false
+		return
 	if _node != null and is_instance_valid(_node):
 		_node.position = _to
 		_node.rotation.y = _to_yaw
@@ -101,6 +124,19 @@ func _finish_current() -> void:
 	_playing = false
 	_node = null
 	_robot = null
+
+## Aplikuje `ratio` (0..1) na jednu část jízdy plošiny — kostku paluby
+## (MultiMesh instance) nebo uzel (robot/zařízení/předmět/klíč).
+func _apply_platform_part(part: Dictionary, ratio: float) -> void:
+	var pos: Vector3 = (part["from"] as Vector3).lerp(part["to"], ratio)
+	if part["kind"] == "multimesh":
+		var mm: MultiMesh = part["multimesh"]
+		if is_instance_valid(mm):
+			mm.set_instance_transform(part["index"], Transform3D(part["basis"], pos))
+	else:
+		var node: Node3D = part["node"]
+		if node != null and is_instance_valid(node):
+			node.position = pos
 
 func _next() -> void:
 	while not _queue.is_empty():
@@ -113,6 +149,7 @@ func _next() -> void:
 func _start(event: Event) -> bool:
 	match event.type:
 		Event.EventType.ROBOT_MOVED:
+			_mode = "single"
 			var robot_index := int(event.data["robot"])
 			_node = view.robot_node(robot_index)
 			if _node == null:
@@ -145,6 +182,7 @@ func _start(event: Event) -> bool:
 			_play_clips(MOVE_CLIPS.get(substep, []), STEP_TIME)
 			return true
 		Event.EventType.ROBOT_TURNED:
+			_mode = "single"
 			_ramp_chain_robot = -1
 			var turned_robot_index := int(event.data["robot"])
 			_node = view.robot_node(turned_robot_index)
@@ -169,16 +207,13 @@ func _start(event: Event) -> bool:
 				node.visible = false
 			return false
 		Event.EventType.BLOCK_REMOVED, Event.EventType.BLOCK_PLACED, \
-		Event.EventType.BLOCK_FELL, Event.EventType.PLATFORM_MOVED, \
-		Event.EventType.ICE_MELTED:
+		Event.EventType.BLOCK_FELL, Event.EventType.ICE_MELTED:
 			view.refresh_blocks()
 			# Změna geometrie mění kapacitu vrstev, a tím i hladinu (§9.2).
 			view.refresh_water()
-			if event.type == Event.EventType.PLATFORM_MOVED:
-				# Zařízení v kostkách plošiny jedou s ní (devices.gd:157) —
-				# refresh_devices() dorovná i pozici, ne jen stav.
-				view.refresh_devices()
 			return false
+		Event.EventType.PLATFORM_MOVED:
+			return _start_platform_moved(event)
 		Event.EventType.WATER_VOLUME_CHANGED, Event.EventType.PUMP_TRANSFERRED:
 			view.refresh_water()
 			return false
@@ -193,6 +228,75 @@ func _start(event: Event) -> bool:
 			view.refresh_devices()
 			return false
 	return false
+
+## Přejezd transportní plošiny (§13.2, design dok. §2.2.1) jako JEDNA
+## synchronní jízda: paluba, jezdci, zařízení, klíč i odložené předměty se
+## po dobu PLATFORM_TIME pohybují stejným tempem, ne postupně za sebou.
+##
+## Simulace v tuhle chvíli už je hotová — svět nese CÍLOVÝ stav. Proto se
+## nejdřív vše dorovná na finální pozici obvyklými refresh_*() (stejně jako
+## dřív), a teprve pak se každá nesená část dočasně "odtáhne" zpátky o
+## `delta` (viz _apply_platform_part(part, 0.0) níž) a nechá dojet přes
+## _process(). Roboti výjimku netvoří obráceně: jejich uzel refresh nemá,
+## takže zůstává na staré pozici, dokud ho sem sama nedotáhneme na cíl.
+func _start_platform_moved(event: Event) -> bool:
+	var platform_index := int(event.data["platform"])
+	var from_offset: Vector3i = event.data["from_offset"]
+	var to_offset: Vector3i = event.data["to_offset"]
+	var delta := to_offset - from_offset
+	var offset := Vector3(delta) * WorldView.CELL_SIZE
+	var platform: PlatformState = view.world.platforms[platform_index]
+
+	view.refresh_blocks()
+	view.refresh_water()
+	view.refresh_devices()
+	view.refresh_items()
+
+	_platform_parts.clear()
+
+	for base_cell: Vector3i in platform.cells:
+		var slot := view.block_multimesh_slot(base_cell + to_offset)
+		if slot.is_empty():
+			continue
+		var mm: MultiMesh = slot["multimesh"]
+		var index: int = slot["index"]
+		var final_pos: Vector3 = mm.get_instance_transform(index).origin
+		var basis: Basis = mm.get_instance_transform(index).basis
+		_platform_parts.append({"kind": "multimesh", "multimesh": mm, "index": index,
+				"basis": basis, "from": final_pos - offset, "to": final_pos})
+
+	for device_index in event.data["carried_devices"]:
+		var device_node := view.device_node(int(device_index))
+		if device_node != null:
+			_platform_parts.append({"kind": "node", "node": device_node,
+					"from": device_node.position - offset, "to": device_node.position})
+
+	# Roboti nemají žádný refresh, který by je posunul dopředu — jejich uzel
+	# je pořád na staré pozici, cíl je proto `+ offset`, ne `- offset`.
+	for robot_index in event.data["riders"]:
+		var robot_node := view.robot_node(int(robot_index))
+		if robot_node != null:
+			_platform_parts.append({"kind": "node", "node": robot_node,
+					"from": robot_node.position, "to": robot_node.position + offset})
+
+	for cell: Vector3i in event.data["moved_item_cells"]:
+		var item_node := view.item_node(cell)
+		if item_node != null:
+			_platform_parts.append({"kind": "node", "node": item_node,
+					"from": item_node.position - offset, "to": item_node.position})
+
+	if bool(event.data["key_moved"]):
+		var key_node := view.key_node()
+		if key_node != null:
+			_platform_parts.append({"kind": "node", "node": key_node,
+					"from": key_node.position - offset, "to": key_node.position})
+
+	for part in _platform_parts:
+		_apply_platform_part(part, 0.0)
+
+	_mode = "platform"
+	_begin(PLATFORM_TIME)
+	return true
 
 ## Cílový náklon pro daný substep (§1.1.4) — jen Net se naklápí, u ostatních
 ## robotů (i když substep DOWN_VERTICAL sdílí s pádem vlivem gravitace,

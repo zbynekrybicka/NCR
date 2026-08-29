@@ -99,9 +99,16 @@ static func device_repaired(device: int) -> Event:
 static func device_toggled(device: int, is_on: bool) -> Event:
 	return Event.new(EventType.DEVICE_TOGGLED, {"device": device, "is_on": is_on})
 
-static func platform_moved(platform: int, from_offset: Vector3i, to_offset: Vector3i) -> Event:
+## `riders`/`carried_devices` jsou indexy robotů/zařízení, `moved_item_cells`
+## jsou CÍLOVÉ buňky předmětů, co se plošinou vezly — animátor (event_animator.gd)
+## z nich sestaví jednu synchronní jízdu paluby i všeho, co na ní stálo/leželo.
+static func platform_moved(platform: int, from_offset: Vector3i, to_offset: Vector3i,
+		riders: Array, carried_devices: Array, moved_item_cells: Array,
+		key_moved: bool) -> Event:
 	return Event.new(EventType.PLATFORM_MOVED,
-			{"platform": platform, "from_offset": from_offset, "to_offset": to_offset})
+			{"platform": platform, "from_offset": from_offset, "to_offset": to_offset,
+			"riders": riders, "carried_devices": carried_devices,
+			"moved_item_cells": moved_item_cells, "key_moved": key_moved})
 
 static func pump_transferred(pump: int, from_reservoir: int, to_reservoir: int,
 		units: int) -> Event:

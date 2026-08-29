@@ -119,18 +119,20 @@ static func move_platform(world: WorldState, platform_index: int, validation: Va
 		world.set_block(entry[0], GridTypes.BlockType.EMPTY)
 
 	# 2) roboti stojící na plošině jedou s ní — dřív, než se položí bloky,
-	#    aby jezdec ani na okamžik neskončil uvnitř pevného bloku (I3)
+	#    aby jezdec ani na okamžik neskončil uvnitř pevného bloku (I3). Celý
+	#    přejezd (paluba, jezdci, náklad) je vizuálně JEDNA synchronní jízda
+	#    (event_animator.gd), proto tu nevzniká vlastní ROBOT_MOVED — jen
+	#    `platform_moved` níž nese seznam jezdců pro animaci.
 	for rider_index in riders:
 		var robot: RobotState = world.robots[rider_index]
-		var from := robot.cell
-		robot.cell = from + delta
-		out_events.append(Event.robot_moved(rider_index, from, robot.cell,
-				GridTypes.Substep.FORWARD))
+		robot.cell += delta
 
 	# 2b) klíč a odložené předměty ležící na plošině jedou s ní stejně jako
 	#     roboti (design dok. §2.2.1) — jinak by zůstaly nad starou polohou
+	var key_moved := false
 	if world.key_holder == -1 and top_cells.has(world.key_position):
 		world.key_position += delta
+		key_moved = true
 
 	var moved_items: Array = []
 	for cell in world.items_on_ground.keys():
@@ -138,8 +140,11 @@ static func move_platform(world: WorldState, platform_index: int, validation: Va
 			moved_items.append([cell, world.item_at(cell)])
 	for entry in moved_items:
 		world.take_item_at(entry[0])
+	var moved_item_cells: Array = []
 	for entry in moved_items:
-		world.put_item_at(entry[0] + delta, entry[1])
+		var item_target: Vector3i = entry[0] + delta
+		world.put_item_at(item_target, entry[1])
+		moved_item_cells.append(item_target)
 
 	# 3) položit bloky na nové pozice
 	for entry in carried:
@@ -152,13 +157,16 @@ static func move_platform(world: WorldState, platform_index: int, validation: Va
 	var carried_cells := {}
 	for entry in carried:
 		carried_cells[entry[0]] = true
-	for device in world.devices:
+	var carried_devices: Array = []
+	for i in world.devices.size():
+		var device: DeviceState = world.devices[i]
 		if carried_cells.has(device.cell):
+			carried_devices.append(i)
 			device.cell += delta
 
 	platform.current_pose = validation.data["target_pose"]
 	out_events.append(Event.platform_moved(platform_index, from_offset,
-			platform.current_offset()))
+			platform.current_offset(), riders, carried_devices, moved_item_cells, key_moved))
 
 # ── Čerpadla (§13.3) ───────────────────────────────────────────────────────
 
