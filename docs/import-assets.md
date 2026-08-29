@@ -265,9 +265,13 @@ Smyčkový klip (`rotors` u Da, do budoucna `idle`) se pouští hned při stavb�
 
 ### 4.2 Předměty a klíč
 
-Stejný vzor, jen bez animačního stromu: `ItemType.FUEL`, `ItemType.SERVICE_KIT` a klíč dostanou model místo koule a torusu ([world_view.gd:132](../game/app/view/world_view.gd#L132)).
+**Hotovo** — klíč (`blender/items/part_01_key.py` → `assets/items/key.glb`), kanystr (`ItemType.FUEL`, `part_02_canister.py` → `canister.glb`) a service kit (`ItemType.SERVICE_KIT`, `part_03_service_kit.py` → `service_kit.glb`). Stejný vzor jako u robotů/zařízení (`app/view/item_view.gd`, `MODEL_PATHS`, cache scén, placeholder — dosavadní koule/torus, jen přestěhované z `world_view.gd` — při chybějícím `.glb`), ale **bez animačního stromu**: předměty nemají klip, jen klidovou pózu (u klíče nakloněnou 45° — zadání — baženou přímo do modelu, `KEY_Root.rotation_euler` nastavená AŽ PO zavěšení dílů, viz past níže).
 
-Jedna věc navíc: **nesený předmět**. Dnes se předmět po sebrání jen přestane kreslit (`refresh_items()` čte `world.items_on_ground`). S modely se hodí ukázat ho v inventáři robota — vizuálně na modelu (slot/držák) nebo v HUD ikonou. Je to čistě view: `RobotState.inventory` už informaci nese.
+Otáčení kolem svislé osy a pohupování nahoru/dolů (zadání, platí pro všechny tři) dělá `ItemView._process()` v kódu, ne klip v Blenderu — přesně to samo `import-assets.md` už dřív předjímalo ("stejný vzor, jen bez animačního stromu"). Vnější uzel `ItemView` nese pozici v mřížce (tweenuje ji `EventAnimator` při přejezdu plošiny, [§13.2](technical-design.md#132-transportní-plošiny)), vnitřní `_float` dělá idle pohyb — stejné odstínění jako `RobotView`/model uvnitř.
+
+**Past, na kterou se přišlo při klíči:** `parent_to()` (`ncr_common.py`) počítá `matrix_parent_inverse` z AKTUÁLNÍ transformace rodiče, aby dítě při zavěšení navenek neposkočilo. Nastavit `KEY_Root.rotation_euler` PŘED zavěšením dílů proto náklon potichu vyruší — děti navenek zůstanou ležet vodorovně, přestože root rotaci nese. Build "bez chyby" (i kontrola obálky buňky) tohle nepozná, jen render. Řešení: rotovat root až PO parentování, stejně jako `build_devices.py` dělá s `godot_forward()`.
+
+Ještě jedna věc navíc, pořád otevřená: **nesený předmět**. Dnes se předmět po sebrání jen přestane kreslit (`refresh_items()` čte `world.items_on_ground`). S modely se hodí ukázat ho v inventáři robota — vizuálně na modelu (slot/držák) nebo v HUD ikonou. Je to čistě view: `RobotState.inventory` už informaci nese.
 
 ### 4.3 Zařízení a plošiny
 

@@ -141,3 +141,10 @@ a stojí za zopakování:
   s opačným znaménkem se při interpolaci po složkách přetočí dokola.
 - **Kontrola obálky se dělá na stojícím modelu**, ne na rozkročeném —
   proto se animace pouští až po `report()`.
+- **`parent_to()` počítá `matrix_parent_inverse` z AKTUÁLNÍ transformace
+  rodiče**, aby dítě při zavěšení navenek neposkočilo. Nastavit rotaci
+  rodiče PŘED zavěšením dětí ji proto tímhle přepočtem potichu vyruší — děti
+  navenek zůstanou stát/ležet, jako by rodič žádnou rotaci neměl (`blender/items/part_01_key.py`,
+  45° náklon klíče). Řešení: rotovat rodiče AŽ PO zavěšení, stejně jako
+  `godot_forward()` dělá s otočkou o 180°. Build i kontrola obálky tohle
+  neodhalí, jen render.

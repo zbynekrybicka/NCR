@@ -587,39 +587,45 @@ func _control_unit_pose(device_index: int) -> int:
 			return pump.current_direction
 	return 0
 
+## Volá se nejen při ITEM_PICKED_UP/ITEM_DROPPED/KEY_PICKED_UP a PLATFORM_MOVED
+## (event_animator.gd), ale i po KAŽDÉ dokončené animaci (level_controller.gd
+## `_on_animation_finished()` — bezpečnostní dorovnání stavu, ne jen pro
+## předměty). Uzly ale nesou vlastní idle animaci (otáčení + pohupování,
+## `ItemView._process()`) s náhodnou fází — kdyby se tu bouraly a stavěly
+## znovu při každém volání jako dřív u holých placeholder meshů, každý krok
+## nebo otočka by všechny předměty v levelu viditelně přehodily do startovní
+## pózy. Proto se sáhne jen na skutečný rozdíl (přidané/odebrané/změněné
+## buňky) a nedotčené uzly si svou animaci nesou dál.
 func refresh_items() -> void:
-	for node in _item_nodes.values():
-		node.queue_free()
-	_item_nodes.clear()
+	for cell in _item_nodes.keys():
+		if not world.items_on_ground.has(cell):
+			_item_nodes[cell].queue_free()
+			_item_nodes.erase(cell)
 	for cell in world.items_on_ground.keys():
-		var mesh := SphereMesh.new()
-		mesh.radius = 0.2
-		mesh.height = 0.4
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(0.9, 0.5, 0.1) \
-			if world.items_on_ground[cell] == GridTypes.ItemType.FUEL \
-			else Color(0.3, 0.8, 0.9)
-		mesh.material = material
-		var node := MeshInstance3D.new()
-		node.mesh = mesh
+		var item_type: int = world.items_on_ground[cell]
+		var existing: ItemView = _item_nodes.get(cell)
+		if existing != null and existing.kind == ItemView.kind_for_item_type(item_type):
+			continue
+		if existing != null:
+			existing.queue_free()
+		var node := ItemView.for_item_type(item_type)
 		node.position = cell_to_position(cell)
 		add_child(node)
 		_item_nodes[cell] = node
 
-	if _key_node != null and is_instance_valid(_key_node):
+	var key_should_exist := world.key_holder == -1
+	var key_exists := _key_node != null and is_instance_valid(_key_node)
+	if key_exists and not key_should_exist:
 		_key_node.queue_free()
-	if world.key_holder == -1:
-		var key_mesh := TorusMesh.new()
-		key_mesh.inner_radius = 0.1
-		key_mesh.outer_radius = 0.2
-		var key_material := StandardMaterial3D.new()
-		key_material.albedo_color = Color(1.0, 0.85, 0.2)
-		key_mesh.material = key_material
-		var key_node := MeshInstance3D.new()
-		key_node.mesh = key_mesh
-		key_node.position = cell_to_position(world.key_position)
-		add_child(key_node)
-		_key_node = key_node
+		_key_node = null
+	elif key_should_exist and not key_exists:
+		_key_node = ItemView.for_key()
+		add_child(_key_node)
+	if key_should_exist:
+		# Poloha se dorovnává vždycky (ne jen při vzniku uzlu) — klíč se může
+		# přesunout po plošině, aniž by přestal ležet na zemi (viz komentář
+		# funkce výš).
+		_key_node.position = cell_to_position(world.key_position)
 
 func robot_node(index: int) -> Node3D:
 	if index < 0 or index >= _robot_nodes.size():
