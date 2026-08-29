@@ -67,23 +67,41 @@
       },
       {
         "type": "sequence",
-        "comment": "vylezení z vody na ledový břeh o patro výš — po vylezení Dul pokračuje skluzem až na konec ledové cesty (design dok. §1.1.2). Podmínku hladiny řeší here_water_is_deep, viz větev níž.",
+        "comment": "vylezení z vody na ledový břeh o patro výš, krok 1/2: svisle vzhůru — přesně obráceně než vstup do vody (vpřed a pak dolů usazením, §8). Po vylezení Dul pokračuje skluzem až na konec ledové cesty (design dok. §1.1.2). Podmínku hladiny řeší here_water_is_deep, viz větev níž.",
         "children": [
           {"type": "condition", "predicate": "ahead_is_solid"},
           {"type": "condition", "predicate": "ahead_is_ice"},
           {"type": "condition", "predicate": "here_water_is_deep"},
           {"type": "condition", "predicate": "ahead_above_is_passable"},
-          {"type": "emit_continue", "substep": 1, "mode": "slide"}
+          {"type": "condition", "predicate": "above_is_passable"},
+          {"type": "emit_continue", "substep": 2, "mode": "climb_out_ice"}
         ]
       },
       {
         "type": "sequence",
-        "comment": "vylezení z vody na břeh o patro výš — před Dulem je zeď břehu a vystupuje se na její horní hranu. Podmínka §1.1.2 „hladina je ve stejné výšce jako povrch, na který vylézá\" je tady totožná s „voda v mé buňce je hlubší než půl kostky\": horní hrana zdi leží přesně o kostku výš než dno mé buňky, takže hloubka > 1/2 znamená hladinu výš než půl kostky pod tou hranou — což je právě tolerance z §2.1.4. Je-li cílová buňka ještě pod hladinou, není to vylezení, ale plavání šikmo vzhůru, a to je taky v pořádku.",
+        "comment": "vylezení z vody na ledový břeh, krok 2/2: vodorovně vpřed na led, odkud Dul pokračuje skluzem.",
+        "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["climb_out_ice"]},
+          {"type": "emit_continue", "substep": 0, "mode": "slide"}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "vylezení z vody na břeh o patro výš, krok 1/2: svisle vzhůru — přesně obráceně než vstup do vody (vpřed a pak dolů usazením, §8). Před Dulem je zeď břehu a vystupuje se na její horní hranu. Podmínka §1.1.2 „hladina je ve stejné výšce jako povrch, na který vylézá\" je tady totožná s „voda v mé buňce je hlubší než půl kostky\": horní hrana zdi leží přesně o kostku výš než dno mé buňky, takže hloubka > 1/2 znamená hladinu výš než půl kostky pod tou hranou — což je právě tolerance z §2.1.4. Je-li cílová buňka ještě pod hladinou, není to vylezení, ale plavání šikmo vzhůru, a to je taky v pořádku.",
         "children": [
           {"type": "condition", "predicate": "ahead_is_solid"},
           {"type": "condition", "predicate": "here_water_is_deep"},
           {"type": "condition", "predicate": "ahead_above_is_passable"},
-          {"type": "emit", "substep": 1}
+          {"type": "condition", "predicate": "above_is_passable"},
+          {"type": "emit_continue", "substep": 2, "mode": "climb_out_ledge"}
+        ]
+      },
+      {
+        "type": "sequence",
+        "comment": "vylezení z vody na břeh, krok 2/2: vodorovně vpřed na hranu břehu.",
+        "children": [
+          {"type": "condition", "predicate": "mode_in", "arg": ["climb_out_ledge"]},
+          {"type": "emit", "substep": 0}
         ]
       },
       {
