@@ -201,9 +201,9 @@ Cache je nutná: `WorldView.build()` se volá při každém načtení levelu i r
 
 ### 3.4 Vykreslování podle `model_id` a orientace
 
-`refresh_blocks()` dnes drží jednu `MultiMeshInstance3D` na *typ*. Nově drží jednu na **dvojici (typ, model_id)** — jinak by nešly ve stejném levelu použít dvě varianty zdi. Klíčem slovníku `_block_layers` bude `Vector2i(typ, model_id)`; vrstvy se vytvářejí líně podle toho, co v levelu skutečně je (většina levelů použije jen pár kombinací).
+`refresh_blocks()` dnes drží jednu `MultiMeshInstance3D` na *typ*. Nově drží jednu na **dvojici (typ, model_id)** — jinak by nešly ve stejném levelu použít dvě varianty zdi. Klíčem slovníku `_block_layers` bude `Vector2i(typ, model_id)`; vrstvy se vytvářejí líně podle toho, co v levelu skutečně je (většina levelů použije jen pár kombinací). **Tahle obecná — `model_id`-klíčovaná — část zůstává neudělaná**, viz A2 v [§8](#8-postup-po-krocích).
 
-Zároveň se konečně použije orientace:
+**Hotovo (šikmina, jediný blok s reálným modelem zatím):** `blender/level_blocks/` staví bokorys pravoúhlého trojúhelníku (design dok. §2.1.4) s ocelovou texturou sdílenou se zdí (`zed_ocel.jpg`, UV mapovaná na model místo plochého materiálu na `BoxMesh`) a exportuje ho do `assets/level_blocks/ramp.glb`. Vysoká/svislá strana leží na modelovém čele (Blender −Y), takže po `godot_forward` směřuje k `Direction.NORTH` s nulovou rotací — přesně jak čte [`WorldState.is_ramp_rising_toward()`](../game/core/sim/world_state.gd#L137): šikmina s `orientation == NORTH` má vysokou stranu na severní hraně buňky. `WorldView.ramp_mesh()` model načte a nakešuje (`null`, když `.glb` chybí — §2.4, `refresh_blocks()` pak spadne na dosavadní placeholder půlku kostky), a orientace se konečně používá:
 
 ```gdscript
 var basis := Basis(Vector3.UP, WorldView.facing_to_yaw(world.orientation_at(cell)))
@@ -211,9 +211,13 @@ instance.multimesh.set_instance_transform(i,
 		Transform3D(basis, cell_to_position(cell) + offset))
 ```
 
-Znaménko yaw musí sedět s [`editor_view.gd:116`](../game/app/editor/editor_view.gd#L116), kde už se orientace vykresluje (a je tam s opačným znaménkem než `facing_to_yaw`). **Sjednoť to na jedno místo**, ideálně statickou funkci ve `WorldView`, kterou použije i editor — jinak bude šikmina v editoru mířit jinam než ve hře.
+Znaménko yaw je teď sjednocené s [`facing_to_yaw()`](../game/app/view/world_view.gd#L420) (stejné, jaké používají roboti/zařízení) — `editor_view.gd` dřív šikminu natáčelo s opačným znaménkem, což s placeholder krychlí nebylo poznat, ale s nesymetrickým modelem by šikmina v editoru mířila jinam než ve hře. Opraveno na stejné znaménko na obou místech.
 
-Posun `offset` pro šikminu (dnes `-0.25` na Y, [world_view.gd:93](../game/app/view/world_view.gd#L93)) se s reálným modelem **ruší** — model už má hmotu ve správné půlce krychle. Placeholder větev si offset ponechá.
+Posun `offset` pro šikminu (dřív `-0.25` na Y, [world_view.gd:93](../game/app/view/world_view.gd#L93)) se s reálným modelem **ruší** — model už má hmotu ve správné půlce krychle. Placeholder větev (chybějící `.glb`) si offset ponechává.
+
+**Past, na kterou se přišlo až ve hře (ne na renderu, viz §2.5):** `MultiMesh` bere holý `Mesh`, ne uzel — `ramp_mesh()` proto z naimportované scény vytáhne `instance.mesh`. Jenže `instance.mesh` nese jen lokální geometrii dílu, **ne otočku kořene scény**, a právě na kořeni sedí `nc.godot_forward()`ova otočka o 180°. Roboti a zařízení ji dostanou zadarmo (vkládá se celý uzel), šikmina ne — bez upečení `instance`ovy transformace do vrcholů (`WorldView._extract_mesh()` → `_bake_transform()`) stoupala přesně opačným směrem, než říkala `orientation_at()`. Poučení pro příští model bloku v `MultiMesh`: **holý `Mesh` z importované scény nikdy nenese transformaci kořene** — vždycky se musí upéct ručně, přesně jako tady.
+
+Druhá past při psaní opravy: `instance.global_transform` mimo živý `SceneTree` (přesně tenhle případ — `scene.instantiate()` žádný strom nedá) vrací identitu a chybu, protože `Node3D.get_global_transform()` to hlídá přes `is_inside_tree()`. Řeší to `WorldView._chain_transform()` — poskládá transformaci ručně přes lokální `transform` uzlů od `instance` až ke kořeni, což funguje i mimo strom.
 
 ### 3.5 Co do MultiMesh nepatří
 
@@ -268,6 +272,36 @@ Jedna věc navíc: **nesený předmět**. Dnes se předmět po sebrání jen př
 ### 4.3 Zařízení a plošiny
 
 Zařízení mají stav (`is_broken`, `is_on` — [§13.1](technical-design.md#131-zařízení)), takže potřebují vlastní uzel s materiálem reagujícím na stav (kontrolka), ne `MultiMesh`. Plošina je sada buněk, které se hýbou jako celek ([devices.gd:109](../game/core/sim/devices.gd#L109)) — jeden uzel s modelem plošiny, kterým se posouvá při `PLATFORM_MOVED`.
+
+**Hotovo** (elektrická skříň a řídicí jednotka — plošiny a čerpadla zůstávají neřešené, viz A10 v [§8](#8-postup-po-krocích)):
+
+```
+DeviceView (Node3D)          ← tímhle hýbe WorldView._build_devices() (buňka, yaw podle access_direction)
+└── Model (instance GLB, nebo placeholder se stejnou strukturou)
+    ├── *Lamp                (MeshInstance3D — kontrolka, jen skříň)
+    ├── *Damage              (Node3D — trhlina + útržky, jen skříň, viditelnost = is_broken)
+    ├── *SparkAnchor         (Node3D bez meshe — kotva GPUParticles3D jisker, jen skříň)
+    └── *Lever               (Node3D — páka, jen řídicí jednotka)
+```
+
+Vzor je stejný jako u [`robot_view.gd`](../game/app/view/robot_view.gd) (`app/view/device_view.gd`, `MODEL_PATHS` podle `DeviceKind`, cache scén, placeholder při chybějícím `.glb`), se dvěma rozdíly:
+
+1. **Model se hledá podle koncovky jména** (`find_child("*Lamp", true, false)`), ne přesně — reálný model má uzly prefixované (`CABINET_Lamp`, `CTRL_Lever`), protože `blender/devices/common.py`'s `nc.purge()` potřebuje jednotný prefix na celý díl (stejná konvence jako `YEO_*`/`DUL_*` u robotů). Placeholder uzly jsou beze prefixu — hvězdička sedí na obojí.
+2. **Čelo modelu (dvířka/páka) míří podle `device.access_direction`**, ne podle žádné "otočky" zařízení — zařízení samo o sobě facing nemá, ale dvířka musí koukat na buňku, ze které ho Il ovládá (`DeviceState.access_cell()`, [§13.1](technical-design.md#131-zařízení)). Proto `WorldView._build_devices()` používá stejnou `facing_to_yaw()` jako roboti, jen se vstupem `access_direction` místo `robot.facing`.
+
+**Elektrická skříň** (`blender/devices/part_01_cabinet.py` → `assets/devices/cabinet.glb`): krychle vyplňující celou buňku (stejně jako blok `WALL`) s dvířky na čele, žlutým výstražným bleskem (`common.lightning_bolt_points()` — 7bodový cikcak, typický tvar symbolu "pozor, elektřina") a kontrolkou nad dvířky. `DeviceView.update_cabinet(is_broken, is_on)`:
+
+- **Kontrolka** (`*Lamp`) — Godot za běhu duplikuje materiál a přebarvuje/rozsvěcí emission: zeleně pod napětím, červeně při poruše (i bez napětí — "tady je problém" je čitelné hned).
+- **Poškození** — `*Damage` (trhlina + pár uletěných úlomků pláště, statická geometrie z Blenderu) se jen zobrazí/skryje podle `is_broken`. Žádná animace otevírání dvířek (design dokument ji nevyžaduje a hinge rig by nesl komplexitu bez herní hodnoty).
+- **Jiskry** — **nejsou** součástí modelu. `DeviceView._make_sparks()` staví `GPUParticles3D` (aditivní billboardy, gravitace dolů) zavěšené na `*SparkAnchor`, stejný princip jako částice cíle v `WorldView` ([§3](#3-modely-bloků-model_id-a-knihovna-modelů) tabulka v [§3.5](#35-co-do-multimesh-nepatří) — dynamický stav nepatří do statické geometrie).
+
+**Řídicí jednotka** (`blender/devices/part_02_control_unit.py` → `assets/devices/control_unit.glb`): tentýž půdorys jako skříň (jedna rodina), s pákou na malém pouzdru uprostřed panelu místo blesku a kontrolky. Design dokument (§2.2.1) říká, že tlačítko i přepínač jsou týž fyzický panel, liší se jen `control_mode` — model je tedy jeden, a páka reprezentuje obě varianty. `DeviceView.update_control_unit(pose)` natočí `*Lever` do jedné ze dvou poloh (`LEVER_POSE_DEG = [-28°, 28°]`, musí sedět s `devices_spec.LEVER_POSE_DEG` v Blenderu) — přepínač je tak vizuálně rozlišitelný podle polohy (zadání). `CONTROL_UNIT` sám o sobě žádný trvalý stav nenese (sepnutí je jednorázové, §13.1), takže `pose` je stav **napojeného mechanismu**, ne zařízení samotného: `WorldView._control_unit_pose()` čte `PlatformState.current_pose`, nebo když je jednotka napojená na čerpadlo, `PumpState.current_direction`; bez napojení zůstává páka v poloze 0.
+
+Páka je v Blenderu postavená rovně "nahoru" z pivotu (nulová baked rotace, `align_to()` dá identitu) — Godot na ni pak nastaví `rotation_degrees` jako celý `Vector3`, ne po složkách, ať žádná zbytková rotace z importu nekříží tu, kterou nastavuje `DeviceView` (částečné přiřazení jako `rotation_degrees.x = …` by u uzlu s nenulovou baked rotací mohlo dát jiný výsledek, než by se čekalo — [Node3D.rotation_degrees dekomponuje aktuální bázi](https://docs.godotengine.org/en/stable/classes/class_node3d.html#class-node3d-property-rotation-degrees) při každém čtení).
+
+**Zařízení na plošině.** `DeviceSystem.move_platform()` posouvá `device.cell` spolu s kostkami plošiny ([devices.gd:157](../game/core/sim/devices.gd#L157)) — `refresh_devices()` proto při každém volání dorovnává i pozici uzlu, ne jen stav, a `EventAnimator` ji volá i na `PLATFORM_MOVED`, ne jen na `DEVICE_TOGGLED`/`DEVICE_REPAIRED`. Bez toho by zařízení zůstalo viset na staré pozici, jakmile by ho plošina odvezla.
+
+**Co zbývá (A10 pokračuje):** plošiny a čerpadla samotné pořád nemají žádný vizuál — jen zařízení, která je ovládají. Model plošiny (sada kostek, co se hýbou jako celek) a čerpadla (spojnice dvou nádrží) je samostatný krok, popsaný výš v tabulce.
 
 ### 4.4 Voda
 
@@ -630,7 +664,7 @@ Stejná logika jako [§20.4 technického designu](technical-design.md#204-rozpis
 | # | Vzniká | Ověření | Stojí na | Stav |
 |---|---|---|---|:--:|
 | A1 | `assets/` dle [§2.1](#21-kam-co-patří), konvence exportu, první testovací blok (`WALL`) | ve hře je zeď jako model, všechno ostatní stále placeholder | [§2](#2-adresáře-export-z-blenderu-konvence) | ☐ |
-| A2 | `app/view/model_library.gd`, `WorldView` vykresluje podle `model_id` **a orientace** | šikmina v levelu míří tam, kam se po ní dá vyjít; editor i hra shodně | [§3](#3-modely-bloků-model_id-a-knihovna-modelů) | ☐ |
+| A2 | `app/view/model_library.gd`, `WorldView` vykresluje podle `model_id` **a orientace** | šikmina v levelu míří tam, kam se po ní dá vyjít; editor i hra shodně | [§3](#3-modely-bloků-model_id-a-knihovna-modelů) | ◐ |
 | A3 | `app/view/robot_view.gd`, modely robotů s fallbackem, `idle` | 7 robotů má model nebo krychli, nic se nerozbije při chybějícím GLB | [§4.1](#41-struktura-uzlu-robota) | ☑ |
 | A4 | `app/view/anim_timing.gd` — časy a `speed_scale` z animátoru na jedno místo, včetně kamery | `speed_scale = 3.0` zpomalí hru a **nezmění** průchod levelem | [§6.2](#62-časy-na-jedno-místo) | ☐ |
 | A5 | klipy chůze/otáčení napojené na `ROBOT_MOVED` / `ROBOT_TURNED` podle `substep` | krok po šikmině vypadá jinak než rovný; přeskočení nechá scénu v koncové póze | [§6.3](#63-klip-vs-tabulka-kdo-určuje-délku), [§6.4](#64-mapa-událostí-na-animace) | ◐ |
@@ -638,7 +672,7 @@ Stejná logika jako [§20.4 technického designu](technical-design.md#204-rozpis
 | A7 | animace akcí (kopání, vysypání, pálení, mrazení, čerpání) | každá akce má klip a definovanou koncovou pózu | A6 | ☐ |
 | A8 | souběžné události + dočasné uzly pro `BLOCK_FELL`, `PLATFORM_MOVED` | blok viditelně padá, plošina veze roboty, fronta se nezasekne | [§6.6](#66-souběh-fronta-a-dočasné-uzly) | ☐ |
 | A9 | **vykreslení vody** — hladinový mesh na nádrž, `WATER_VOLUME_CHANGED` | hladina je vidět, `SHALLOW` a `DEEP` jsou rozlišitelné, stoupá plynule | [§4.4](#44-voda), [§9 TD](technical-design.md#9-vodní-systém) | ☐ |
-| A10 | **vykreslení zařízení a plošin** (dnes neviditelné) | skříň, jednotka, plošina i čerpadlo jsou vidět a ukazují stav | [§4.3](#43-zařízení-a-plošiny) | ☐ |
+| A10 | **vykreslení zařízení a plošin** (dnes neviditelné) | skříň, jednotka, plošina i čerpadlo jsou vidět a ukazují stav | [§4.3](#43-zařízení-a-plošiny) | ◐ |
 | A11 | `assets/ui/theme.tres` + ikony v editoru a HUD | UI má jednotný vzhled, tlačítka bez ikony nepadají | [§5](#5-2d-obrázky-a-ui) | ☐ |
 | A12 | HUD s panelem robotů dle design dokumentu | přepnutí robota klikem, stav inventáře a klíče je vidět bez čtení textu | [§5.3](#53-hud) | ☐ |
 | A13 | kulisa levelu — biotopová scéna, světlo mimo `WorldView` | level stojí v krajině, okraj čte jako neprůchodný | [§7.2](#72-kulisa-kolem-levelu) | ☐ |
@@ -651,7 +685,7 @@ Stejná logika jako [§20.4 technického designu](technical-design.md#204-rozpis
 
 **Kde se to nejspíš zadrhne:**
 
-- **A2** — sjednocení znaménka yaw mezi hrou a editorem. Dnes se liší ([editor_view.gd:116](../game/app/editor/editor_view.gd#L116) vs. [world_view.gd:117](../game/app/view/world_view.gd#L117)) a s krychlemi to není poznat. S modely to bude poznat okamžitě.
+- **A2** — sjednocení znaménka yaw mezi hrou a editorem, u šikminy už opravené (viz §3.4 "Hotovo"). Zbytek modelů bloků (`model_id`-klíčovaná knihovna) na tenhle past teprve narazí, až přibude druhý nesymetrický model.
 - **A6** — jediný krok, který sahá do `core/`. Nespojuj ho s ničím jiným.
 - **A9/A10** — nejsou to importy assetů, ale chybějící kód. Naplánuj je jako samostatnou práci, ne jako „dokreslení“.
 - **A13** — velikost levelu je proměnná; kulisa modelovaná na jeden konkrétní level se u dalšího rozsype.

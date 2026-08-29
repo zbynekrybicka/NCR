@@ -112,20 +112,24 @@ func _build_bounds() -> void:
 func _mesh_for(block_type: int) -> Mesh:
 	if _mesh_cache.has(block_type):
 		return _mesh_cache[block_type]
-	var color: Color = WorldView.BLOCK_COLORS.get(block_type, Color.MAGENTA)
-	var texture: Texture2D = WorldView.BLOCK_TEXTURES.get(block_type)
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(CELL_SIZE, CELL_SIZE * (0.5 if block_type == GridTypes.BlockType.RAMP else 1.0), CELL_SIZE)
-	var material := StandardMaterial3D.new()
-	if texture != null:
-		material.albedo_texture = texture
-	else:
-		material.albedo_color = color
-	mesh.material = material
+	var mesh: Mesh = WorldView.ramp_mesh() if block_type == GridTypes.BlockType.RAMP else null
+	if mesh == null:
+		var color: Color = WorldView.BLOCK_COLORS.get(block_type, Color.MAGENTA)
+		var texture: Texture2D = WorldView.BLOCK_TEXTURES.get(block_type)
+		var box := BoxMesh.new()
+		box.size = Vector3(CELL_SIZE, CELL_SIZE * (0.5 if block_type == GridTypes.BlockType.RAMP else 1.0), CELL_SIZE)
+		var material := StandardMaterial3D.new()
+		if texture != null:
+			material.albedo_texture = texture
+		else:
+			material.albedo_color = color
+		box.material = material
+		mesh = box
 	_mesh_cache[block_type] = mesh
 	return mesh
 
 func _build_blocks() -> void:
+	var ramp_has_model := WorldView.ramp_mesh() != null
 	for index in level.cell_count():
 		var block: int = level.blocks[index]
 		if block == GridTypes.BlockType.EMPTY:
@@ -134,10 +138,13 @@ func _build_blocks() -> void:
 		var node := MeshInstance3D.new()
 		node.mesh = _mesh_for(block)
 		var offset := Vector3.ZERO
-		if block == GridTypes.BlockType.RAMP:
+		if block == GridTypes.BlockType.RAMP and not ramp_has_model:
 			offset = Vector3(0, -CELL_SIZE * 0.25, 0)
 		node.position = WorldView.cell_to_position(cell) + offset
-		node.rotation.y = -WorldView.facing_to_yaw(level.orientation_at(cell))
+		# Stejné znaménko jako u robotů/zařízení (facing_to_yaw), ne obrácené —
+		# šikmina teď má reálný nesymetrický model, takže na tom závisí, jestli
+		# stoupá tam, kam říkají data (§2.3 import-assets).
+		node.rotation.y = WorldView.facing_to_yaw(level.orientation_at(cell))
 		_content.add_child(node)
 
 ## Roboti se v editoru kreslí stejně jako ve hře (týž RobotView), aby autor
@@ -190,8 +197,10 @@ func _build_water() -> void:
 					(world.water_depth_at(above) != GridTypes.WaterDepth.DRY or res.unlimited)
 			if above_shown:
 				continue # pod hladinou, nezvýrazňovat
-			if world.block_at(cell) != GridTypes.BlockType.EMPTY:
-				continue # led nebo jiný blok na hladině už buňku zabírá vizuálně
+			var block := world.block_at(cell)
+			if block != GridTypes.BlockType.EMPTY and block != GridTypes.BlockType.RAMP:
+				continue # led nebo jiný blok na hladině už buňku zabírá vizuálně; šikmina nemá
+				# tvar kostky, takže s hladinou neglitchuje a smí se zobrazit i nad ní
 			_content.add_child(WorldView.make_water_surface(cell, depth == GridTypes.WaterDepth.DEEP))
 		_add_marker(res.anchor, Color(0.2, 0.5, 1.0), "Nádrž %d" % i)
 

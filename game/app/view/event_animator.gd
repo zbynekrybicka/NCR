@@ -117,6 +117,10 @@ func _start(event: Event) -> bool:
 			view.refresh_blocks()
 			# Změna geometrie mění kapacitu vrstev, a tím i hladinu (§9.2).
 			view.refresh_water()
+			if event.type == Event.EventType.PLATFORM_MOVED:
+				# Zařízení v kostkách plošiny jedou s ní (devices.gd:157) —
+				# refresh_devices() dorovná i pozici, ne jen stav.
+				view.refresh_devices()
 			return false
 		Event.EventType.WATER_VOLUME_CHANGED, Event.EventType.PUMP_TRANSFERRED:
 			view.refresh_water()
@@ -124,6 +128,12 @@ func _start(event: Event) -> bool:
 		Event.EventType.ITEM_PICKED_UP, Event.EventType.ITEM_DROPPED, \
 		Event.EventType.KEY_PICKED_UP:
 			view.refresh_items()
+			return false
+		Event.EventType.TARGET_UNLOCKED:
+			view.refresh_targets()
+			return false
+		Event.EventType.DEVICE_TOGGLED, Event.EventType.DEVICE_REPAIRED:
+			view.refresh_devices()
 			return false
 	return false
 
