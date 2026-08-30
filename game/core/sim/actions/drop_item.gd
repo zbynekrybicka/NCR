@@ -37,4 +37,5 @@ func apply(world: WorldState, robot_index: int, validation: Validation,
 	world.put_item_at(landing, item)
 	# Dopad do vody je povolený bez další kontroly a hladinu nezvyšuje —
 	# předmět nemá vlastní objem (design dokument §2.1.3).
-	out_events.append(Event.item_dropped(robot_index, item, landing))
+	out_events.append(Event.item_dropped(robot_index, item, landing,
+			ActionHelpers.behind_cell(world, robot_index)))

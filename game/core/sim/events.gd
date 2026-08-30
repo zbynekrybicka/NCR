@@ -76,8 +76,12 @@ static func block_fell(from: Vector3i, to: Vector3i, block: int) -> Event:
 static func item_picked_up(robot: int, item: int, cell: Vector3i) -> Event:
 	return Event.new(EventType.ITEM_PICKED_UP, {"robot": robot, "item": item, "cell": cell})
 
-static func item_dropped(robot: int, item: int, cell: Vector3i) -> Event:
-	return Event.new(EventType.ITEM_DROPPED, {"robot": robot, "item": item, "cell": cell})
+## `from` je buňka, ze které předmět začíná padat (za robotem / pod Da) —
+## stejná výška jako `cell`, když spadne rovnou, jinak vyšší (event_animator.gd
+## z toho počítá animaci pádu).
+static func item_dropped(robot: int, item: int, cell: Vector3i, from: Vector3i) -> Event:
+	return Event.new(EventType.ITEM_DROPPED,
+			{"robot": robot, "item": item, "cell": cell, "from": from})
 
 static func key_picked_up(robot: int, cell: Vector3i) -> Event:
 	return Event.new(EventType.KEY_PICKED_UP, {"robot": robot, "cell": cell})

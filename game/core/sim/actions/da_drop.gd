@@ -35,4 +35,5 @@ func apply(world: WorldState, robot_index: int, validation: Validation,
 	# Da zůstává na svém místě ve vzduchu a na buňku pod sebou už nesmí
 	# přistát, dokud předmět zase nesebere (§7.6, §7.7).
 	robot.cannot_land_cell = robot.cell + GridTypes.DOWN_VECTOR
-	out_events.append(Event.item_dropped(robot_index, item, landing))
+	out_events.append(Event.item_dropped(robot_index, item, landing,
+			robot.cannot_land_cell))

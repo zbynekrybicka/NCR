@@ -14,6 +14,12 @@ const TURN_TIME := 0.25
 ## viz _start_platform_moved().
 const PLATFORM_TIME := 1.0
 
+## Pád puštěného předmětu, který nedosedne hned na podklad ve výšce robota
+## (§11) — nejdřív chvíli visí ve vzduchu, pak padá tempem na kostku pádu,
+## ať nezmizí mimo záběr, když spadne z výšky (postřeh z hraní).
+const ITEM_FALL_HANG_TIME := 1.0 / 3.0
+const ITEM_FALL_TIME_PER_CELL := 1.0 / 3.0
+
 ## Klipy uvnitř modelu robota podle substepu (§6.4). Bere se první, který
 ## model doopravdy má — kdo klip nemá, se jen posune. Krok po šikmině je pořád
 ## chůze, svislý (šplhání Neta, let Da) už ne — tam by `walk` lhal.
@@ -53,6 +59,10 @@ var _mode: String = ""
 ## kostky paluby (MultiMesh instance), nebo {kind:"node", node, from, to} pro
 ## roboty/zařízení/předměty/klíč — viz _start_platform_moved().
 var _platform_parts: Array = []
+
+## Délka viditelného "postátí" ve vzduchu před pádem — jen `_mode == "item_fall"`
+## (viz _start_item_dropped()), jinde beze smyslu.
+var _item_fall_hang: float = 0.0
 
 ## Aktuální náklon (§1.1.4) podle indexu robota — mimo šplhání Neta zůstává
 ## u všech na 0.0 a slovník se pro ně nikdy nezaplní.
@@ -102,6 +112,14 @@ func _process(delta: float) -> void:
 		for part in _platform_parts:
 			_apply_platform_part(part, ratio)
 		return
+	if _mode == "item_fall":
+		if _elapsed < _item_fall_hang and is_instance_valid(_node):
+			_node.position = _from
+		elif is_instance_valid(_node):
+			var fall_duration := _duration - _item_fall_hang
+			var fall_ratio := (_elapsed - _item_fall_hang) / fall_duration
+			_node.position = _from.lerp(_to, clamp(fall_ratio, 0.0, 1.0))
+		return
 	if _node != null and is_instance_valid(_node):
 		_node.position = _from.lerp(_to, ratio)
 		_node.rotation.y = lerp_angle(_from_yaw, _to_yaw, ratio)
@@ -114,6 +132,13 @@ func _finish_current() -> void:
 		_platform_parts.clear()
 		_mode = ""
 		_playing = false
+		return
+	if _mode == "item_fall":
+		if _node != null and is_instance_valid(_node):
+			_node.position = _to
+		_mode = ""
+		_playing = false
+		_node = null
 		return
 	if _node != null and is_instance_valid(_node):
 		_node.position = _to
@@ -217,10 +242,11 @@ func _start(event: Event) -> bool:
 		Event.EventType.WATER_VOLUME_CHANGED, Event.EventType.PUMP_TRANSFERRED:
 			view.refresh_water()
 			return false
-		Event.EventType.ITEM_PICKED_UP, Event.EventType.ITEM_DROPPED, \
-		Event.EventType.KEY_PICKED_UP:
+		Event.EventType.ITEM_PICKED_UP, Event.EventType.KEY_PICKED_UP:
 			view.refresh_items()
 			return false
+		Event.EventType.ITEM_DROPPED:
+			return _start_item_dropped(event)
 		Event.EventType.TARGET_UNLOCKED:
 			view.refresh_targets()
 			return false
@@ -296,6 +322,29 @@ func _start_platform_moved(event: Event) -> bool:
 
 	_mode = "platform"
 	_begin(PLATFORM_TIME)
+	return true
+
+## Puštěný předmět (§11) — `view.refresh_items()` ho už postavil na finální
+## místo (stejný postup jako _start_platform_moved()), tady se jen dočasně
+## odtáhne zpátky na `from` a nechá dojet: chvíli visí, pak padá tempem
+## ITEM_FALL_TIME_PER_CELL na kostku pádu. Dosedne-li rovnou ve výšce, odkud
+## byl puštěn, žádná animace netřeba — vrací false stejně jako beze změny.
+func _start_item_dropped(event: Event) -> bool:
+	view.refresh_items()
+	var to_cell: Vector3i = event.data["cell"]
+	var from_cell: Vector3i = event.data["from"]
+	var distance := from_cell.y - to_cell.y
+	if distance <= 0:
+		return false
+	_node = view.item_node(to_cell)
+	if _node == null:
+		return false
+	_mode = "item_fall"
+	_to = WorldView.cell_to_position(to_cell)
+	_from = WorldView.cell_to_position(from_cell)
+	_node.position = _from
+	_item_fall_hang = ITEM_FALL_HANG_TIME
+	_begin(ITEM_FALL_HANG_TIME + ITEM_FALL_TIME_PER_CELL * distance)
 	return true
 
 ## Cílový náklon pro daný substep (§1.1.4) — jen Net se naklápí, u ostatních
