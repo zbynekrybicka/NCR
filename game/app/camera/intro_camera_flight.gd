@@ -10,6 +10,14 @@ signal finished
 
 const DURATION := 3.0
 
+## Ochrana proti první „trhané" snímce po spuštění levelu — kompilace shaderů
+## pro nově viděný materiál (typicky krajina, viz LandscapeView) umí na pár
+## sekund zaseknout hlavní vlákno. Bez ořezání by tenhle jeden snímek s
+## obřím `delta` posunul `_elapsed` rovnou za `DURATION` a celý přelet (i
+## navazující úvodní text, který se otevře hned po `finished`) by proběhl
+## neviditelně v jediném snímku.
+const MAX_DELTA := 0.1
+
 var _camera: Camera3D
 var _from_eye := Vector3.ZERO
 var _from_target := Vector3.ZERO
@@ -43,7 +51,7 @@ func skip() -> void:
 func _process(delta: float) -> void:
 	if not _playing:
 		return
-	_elapsed += delta
+	_elapsed += minf(delta, MAX_DELTA)
 	var t := clampf(_elapsed / DURATION, 0.0, 1.0)
 	_apply(t * t * (3.0 - 2.0 * t)) # smoothstep — plynulý rozjezd i doběh
 	if t >= 1.0:

@@ -17,6 +17,11 @@ var music: MusicPlayer
 
 var input_locked: bool = false
 
+## Uloženo ze `setup_with_simulation`, aby ho šlo znovu použít při přehrání
+## intro přeletu po restartu levelu (§2.1.6) — restart je taky "zahájení
+## levelu" (§2.1.1), takže musí přelet i úvodní text přehrát znovu.
+var _world_position: Variant = null
+
 ## Akce, kterou po dokončení animace zopakujeme, pokud je pořád držená
 ## (plynulá chůze/otáčení, §17.4).
 var _repeat_action: String = ""
@@ -37,6 +42,7 @@ func setup(level: LevelData) -> void:
 ## dané místo — čistě kosmetická kulisa (§7.2), pravidla hry o ní nic neví.
 func setup_with_simulation(p_simulation: Simulation, world_position: Variant = null) -> void:
 	simulation = p_simulation
+	_world_position = world_position
 
 	if world_position != null:
 		landscape = LandscapeView.new()
@@ -170,6 +176,10 @@ func _send(command_type: int, action: String = "") -> void:
 		_focus_active_robot()
 		hud.show_state(simulation, "Level restartován")
 		_repeat_action = ""
+		if simulation.level.has_intro_camera:
+			_start_intro_flight(_world_position)
+		else:
+			_maybe_show_intro_text()
 		return
 	# Nastavit PŘED přehráním: když fronta neobsahuje nic k animaci (typicky
 	# odmítnutý příkaz), `animator.play` vyvolá `finished` synchronně ještě
