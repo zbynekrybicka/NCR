@@ -10,6 +10,7 @@ var animator: EventAnimator
 var camera_rig: CameraRig
 var hud: Hud
 var landscape: LandscapeView
+var _restart_confirm_dialog: ConfirmationDialog
 var intro_flight: IntroCameraFlight
 var intro_text_overlay: IntroTextOverlay
 var music: MusicPlayer
@@ -60,6 +61,14 @@ func setup_with_simulation(p_simulation: Simulation, world_position: Variant = n
 
 	hud = Hud.new()
 	add_child(hud)
+
+	_restart_confirm_dialog = ConfirmationDialog.new()
+	_restart_confirm_dialog.title = "Restartovat level"
+	_restart_confirm_dialog.dialog_text = "Opravdu chceš restartovat level? Veškerý postup se ztratí."
+	_restart_confirm_dialog.ok_button_text = "Restartovat"
+	_restart_confirm_dialog.cancel_button_text = "Zrušit"
+	_restart_confirm_dialog.confirmed.connect(func(): _send(Command.CommandType.RESTART_LEVEL, InputActions.RESTART_LEVEL))
+	add_child(_restart_confirm_dialog)
 
 	music = MusicPlayer.new()
 	add_child(music)
@@ -144,6 +153,10 @@ func _unhandled_input(_event: InputEvent) -> void:
 		return
 	if animator.is_playing():
 		return # vstup je blokovaný po dobu přehrávání, ne simulace (§17.2)
+
+	if Input.is_action_just_pressed(InputActions.RESTART_LEVEL):
+		_restart_confirm_dialog.popup_centered()
+		return
 
 	for action in InputActions.COMMAND_FOR.keys():
 		if Input.is_action_just_pressed(action):
