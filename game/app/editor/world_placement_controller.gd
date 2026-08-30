@@ -16,6 +16,11 @@ const LANDSCAPE_VIEW_DISTANCE := 180.0
 
 signal confirmed(position: Vector3)
 signal cancelled
+## `eye`/`target` jsou už přepočtené do souřadnic levelu (viz
+## _on_camera_position_requested) — stejný prostor jako
+## LevelData.intro_camera_eye/target a jejich zpětný přepočet na svět v
+## LevelController._level_point_to_world.
+signal camera_position_saved(eye: Vector3, target: Vector3)
 
 var view: WorldPlacementView
 var camera_rig: WorldPlacementCamera
@@ -38,6 +43,7 @@ func _ready() -> void:
 	ui.snap_pressed.connect(_on_snap_pressed)
 	ui.confirm_pressed.connect(_on_confirm_pressed)
 	ui.cancel_pressed.connect(func(): cancelled.emit())
+	ui.camera_position_requested.connect(_on_camera_position_requested)
 
 ## `initial` je poslední známá pozice levelu (z CampaignMap), `has_position`
 ## rozlišuje "level tu ještě nikdy nebyl" od "má pozici (0,0,0)".
@@ -89,6 +95,22 @@ func _on_confirm_pressed() -> void:
 	if not _has_position:
 		return
 	confirmed.emit(_position)
+
+## Uloží aktuální pohled téhle (krajinné) kamery jako úvodní pozici pro
+## intro přelet — na rozdíl od dřívějšího ukládání z běžné editorové kamery
+## (§2.1.1, §2.2.1 design dokumentu) je tahle kamera přímo v krajině, takže
+## jde hned vidět, jestli přelet neprojde domem nebo stromem. Uložit lze,
+## až je level v krajině umístěný — bez _position by nebylo vůči čemu
+## přepočítat pohled kamery (svět) na souřadnice levelu (lokál).
+func _on_camera_position_requested() -> void:
+	if not _has_position:
+		return
+	var eye := camera_rig.camera.global_position
+	var target := camera_rig.target
+	var local_eye := (eye - _position) / LevelController.LEVEL_SCALE_IN_WORLD
+	var local_target := (target - _position) / LevelController.LEVEL_SCALE_IN_WORLD
+	camera_position_saved.emit(local_eye, local_target)
+	ui.set_camera_status("Pozice kamery pro úvodní přelet uložena.")
 
 func _set_position(pos: Vector3, has_position: bool) -> void:
 	_position = pos

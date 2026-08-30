@@ -274,7 +274,7 @@ Jedno sepnutí přečerpá **100 % obsahu zdrojové nádrže** do cílové — n
 
 **Umístění robotů** — Do levelu lze umístit 1 až 7 robotů dle výběru, včetně pozice a směru. Umístění je možné pouze na zem nebo plochou zeď; Dul může být umístěn i ve vodě.
 
-**Úvodní pozice kamery** — Autor levelu může v editoru (v běžném režimu umisťování do mřížky, ne v režimu umístění levelu do krajiny, viz [2.2.2](#222-levely-a-jejich-původ)) nastavit pohled volné editorové kamery a tlačítkem jej uložit jako úvodní pozici pro intro přelet při spuštění levelu (viz [Úvodní přelet kamery](#211-zahájení-levelu)). Uloženou pozici lze i zrušit — level pak žádnou intro animaci nemá. Uložená pozice je součástí souboru levelu.
+**Úvodní pozice kamery** — Autor levelu nastaví pohled volné kamery a tlačítkem jej uloží jako úvodní pozici pro intro přelet při spuštění levelu (viz [Úvodní přelet kamery](#211-zahájení-levelu)). Ukládá se v režimu umístění levelu do krajiny (viz [2.2.2](#222-levely-a-jejich-původ)), ne v běžném režimu umisťování do mřížky — přelet totiž přilétá krajinou (mezi domy, stromy apod.), takže si autor musí polohu kamery ověřit přímo v krajině, ne v izolovaném pohledu na mřížku levelu. Level bez uložené pozice žádnou intro animaci nemá; samostatné tlačítko na zrušení uložené pozice není potřeba — přepsat ji stačí uložením nové. Uložená pozice je součástí souboru levelu.
 
 **Úvodní textová zpráva** — Tlačítkem v ovládacím panelu jde otevřít textové pole, do kterého autor napíše prostý text (odstavce odděl prázdným řádkem) zobrazený hráči po příjezdu kamery na začátku levelu (viz [Úvodní textová zpráva](#211-zahájení-levelu)). Prázdné pole znamená, že level žádnou zprávu nemá. Text je součástí souboru levelu.
 

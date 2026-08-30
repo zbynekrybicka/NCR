@@ -19,8 +19,6 @@ signal new_level_requested(size: Vector3i)
 signal play_pressed
 signal menu_pressed
 signal world_placement_requested
-signal save_camera_position_requested
-signal clear_camera_position_requested
 signal intro_text_edit_requested
 signal intro_text_changed(text: String)
 
@@ -144,8 +142,6 @@ func _make_top_bar() -> Control:
 	_add_button(bar, "Znovu (Ctrl+Y)", func(): redo_pressed.emit())
 	_add_button(bar, "Otočit (R)", func(): rotate_pressed.emit())
 	_add_button(bar, "Umístit ve světě…", func(): world_placement_requested.emit())
-	_add_button(bar, "Uložit pozici kamery", func(): save_camera_position_requested.emit())
-	_add_button(bar, "Zrušit pozici kamery", func(): clear_camera_position_requested.emit())
 	_add_button(bar, "Úvodní text…", func(): intro_text_edit_requested.emit())
 	_add_button(bar, "Přehrát", func(): play_pressed.emit())
 	_add_button(bar, "Menu", func(): menu_pressed.emit())

@@ -10,13 +10,16 @@ signal position_changed(position: Vector3)
 signal snap_pressed
 signal confirm_pressed
 signal cancel_pressed
+signal camera_position_requested
 
 var _x_spin: SpinBox
 var _y_spin: SpinBox
 var _z_spin: SpinBox
 var _status_label: Label
+var _camera_status_label: Label
 var _confirm_button: Button
 var _snap_button: Button
+var _camera_button: Button
 
 var _updating_fields: bool = false
 
@@ -49,6 +52,20 @@ func _ready() -> void:
 
 	_status_label = Label.new()
 	panel.add_child(_status_label)
+
+	var camera_hint := Label.new()
+	camera_hint.text = "Nastav pohled kamery (jako výše — pravé tlačítko, WASDQE, kolečko) " \
+			+ "a ulož ho jako úvodní přelet: takhle uvidíš rovnou, jestli cesta neprochází " \
+			+ "domem nebo stromem."
+	panel.add_child(camera_hint)
+
+	var camera_buttons := HBoxContainer.new()
+	_camera_button = _add_button(camera_buttons, "Uložit pozici kamery",
+			func(): camera_position_requested.emit())
+	panel.add_child(camera_buttons)
+
+	_camera_status_label = Label.new()
+	panel.add_child(_camera_status_label)
 
 	set_position_fields(Vector3.ZERO, false)
 
@@ -93,5 +110,11 @@ func set_position_fields(pos: Vector3, has_position: bool) -> void:
 	_updating_fields = false
 	_confirm_button.disabled = not has_position
 	_snap_button.disabled = not has_position
+	_camera_button.disabled = not has_position
 	_status_label.text = ("Pozice: %s" % pos) if has_position \
 			else "Level zatím nemá místo ve světě — klikni do krajiny."
+
+## Zpráva k uložení pozice kamery (viz camera_position_requested) — odděleně
+## od _status_label, který hlásí stav umístění levelu samotného.
+func set_camera_status(text: String) -> void:
+	_camera_status_label.text = text
