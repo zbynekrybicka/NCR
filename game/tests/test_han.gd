@@ -127,6 +127,13 @@ func test_dump_into_water_raises_the_level() -> void:
 	t.equal(sim.world.reservoirs[0].volume_units, 4, "objem stoupl o kostku (§9.3)")
 	t.is_true(result.has_event(Event.EventType.WATER_VOLUME_CHANGED),
 			"změna hladiny se ohlásila")
+	# Kostka dopadla přímo na kotevní buňku nádrže — zbytek dutiny musí
+	# zůstat platnou nádrží i po _settle()/reidentify (nahlášený bug: voda
+	# celé nádrže "zmizela", protože kotva přestala držet vodu).
+	t.equal(sim.world.reservoirs[0].cells.size(), 2, "nádrži zbyly dvě buňky")
+	t.equal(sim.world.reservoir_at(Vector3i(3, 1, 1)), 0, "sousední buňka pořád patří do nádrže")
+	t.is_true(sim.world.water_depth_at(Vector3i(3, 1, 1)) != GridTypes.WaterDepth.DRY,
+			"voda ve zbytku nádrže zůstala, nezmizela")
 
 func test_dump_that_would_drown_a_robot_is_rejected() -> void:
 	var sim := LevelBuilder.new() \

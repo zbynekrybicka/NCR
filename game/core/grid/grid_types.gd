@@ -79,7 +79,7 @@ const BLOCK_CAPACITY_UNITS := {
 	BlockType.STONE: 0,
 	BlockType.ICE: 0,
 	BlockType.WOOD: 0,
-	BlockType.TARGET: 0,
+	BlockType.TARGET: 2,  # cíl na hladině: vodou zaplnitelný stejně jako EMPTY, viz §2.1.5
 	BlockType.OUTSIDE: 0,
 }
 

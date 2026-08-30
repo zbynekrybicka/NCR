@@ -375,9 +375,10 @@ func test_reservoir_operations() -> void:
 
 	session.run(EditorOperation.SetReservoir.new(Vector3i(1, 2, 1), 4))
 	t.equal(session.level.reservoirs.size(), 1, "nádrž vznikla")
-	# Dutina sahá přes obě patra (3 buňky nahoře + 2 dole u Hana a klíče),
-	# kapacita je součet jejich půlkostkových jednotek (§9.1).
-	t.equal(session.reservoir_capacity(0), 10, "kapacita se odvodila z geometrie")
+	# Dutina sahá přes obě patra (3 buňky nahoře + 3 dole u Hana, klíče a
+	# cíle — cíl se pro vodu chová jako EMPTY, §2.1.5), kapacita je součet
+	# jejich půlkostkových jednotek (§9.1).
+	t.equal(session.reservoir_capacity(0), 12, "kapacita se odvodila z geometrie")
 	t.equal(session.reservoir_index_at(Vector3i(2, 2, 1)), 0,
 			"sousední buňka patří téže nádrži")
 

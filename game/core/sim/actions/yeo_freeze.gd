@@ -36,5 +36,5 @@ func apply(world: WorldState, robot_index: int, validation: Validation,
 	# Kapacita -2 obstará set_block, objem -2 tady: kapacita i objem klesnou
 	# 1:1, takže hladina zbytku vody zůstane přesně na místě (§9.3 pozn. 1).
 	world.set_block(target, GridTypes.BlockType.ICE)
-	out_events.append(Event.block_placed(target, GridTypes.BlockType.ICE))
+	out_events.append(Event.block_placed(target, GridTypes.BlockType.ICE, target))
 	WaterSystem.change_volume(world, reservoir_index, -GridTypes.UNITS_PER_CUBE, out_events)

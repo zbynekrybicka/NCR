@@ -67,8 +67,11 @@ static func active_robot_changed(from: int, to: int) -> Event:
 static func block_removed(cell: Vector3i, block: int) -> Event:
 	return Event.new(EventType.BLOCK_REMOVED, {"cell": cell, "block": block})
 
-static func block_placed(cell: Vector3i, block: int) -> Event:
-	return Event.new(EventType.BLOCK_PLACED, {"cell": cell, "block": block})
+## `from` je buňka, ze které kostka začíná padat — stejná výška jako `cell`,
+## když dosedne rovnou (Yeo mrazí na místě), jinak vyšší (Han vysype korbu
+## nad propast — event_animator.gd z toho počítá pomalý pád, viz §11).
+static func block_placed(cell: Vector3i, block: int, from: Vector3i) -> Event:
+	return Event.new(EventType.BLOCK_PLACED, {"cell": cell, "block": block, "from": from})
 
 static func block_fell(from: Vector3i, to: Vector3i, block: int) -> Event:
 	return Event.new(EventType.BLOCK_FELL, {"from": from, "to": to, "block": block})

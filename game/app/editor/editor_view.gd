@@ -198,9 +198,11 @@ func _build_water() -> void:
 			if above_shown:
 				continue # pod hladinou, nezvýrazňovat
 			var block := world.block_at(cell)
-			if block != GridTypes.BlockType.EMPTY and block != GridTypes.BlockType.RAMP:
+			if block != GridTypes.BlockType.EMPTY and block != GridTypes.BlockType.RAMP \
+					and block != GridTypes.BlockType.TARGET:
 				continue # led nebo jiný blok na hladině už buňku zabírá vizuálně; šikmina nemá
-				# tvar kostky, takže s hladinou neglitchuje a smí se zobrazit i nad ní
+				# tvar kostky, takže s hladinou neglitchuje a smí se zobrazit i nad ní; cíl se
+				# kreslí jako částice, takže hladina pod ním musí zůstat vidět (viz world_view.gd)
 			_content.add_child(WorldView.make_water_surface(cell, depth == GridTypes.WaterDepth.DEEP))
 		_add_marker(res.anchor, Color(0.2, 0.5, 1.0), "Nádrž %d" % i)
 

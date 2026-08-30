@@ -238,6 +238,8 @@ Nádrž lze označit jako **neomezenou** — její hladina se pak nikdy nemění
 
 Dojde-li robot do cíle, zmizí ze scény a hra automaticky přepne aktivního robota na dalšího v sekvenci, stejně jako by přepnutí vyvolal hráč (viz [Přepínání aktivního robota](#212-řízené-prvky--roboti)); dokončený robot ze sekvence přepínání zcela vypadne. Robot, který vešel do cíle, tak už nemůže žádným způsobem pomoci ostatním robotům, ani kdyby to bylo pro dokončení levelu potřeba — hráč si na to musí dát pozor předem.
 
+**Cíl a voda.** Buňka cíle se může nacházet i uvnitř zatopené oblasti (na hladině mělčiny i hlubiny) — vůči vodnímu systému (viz [Voda](#214-statické-prvky--překážky)) se chová stejně jako prázdná buňka: počítá se do kapacity nádrže a hladina jí prochází normálně. Dokud je cíl zamčený, kostka nad hladinou je vizuálně nahrazená skleněnou kostkou zámku; po odemčení zámek zmizí a na jeho místě je vidět normální vodní hladina, stejně jako by tam byla prázdná buňka.
+
 #### 2.1.6 Podmínka ukončení levelu / restart
 
 Hra neobsahuje klasickou "prohru" ve smyslu game over. Robot nemůže provést krok ani akci, které by vedly k jeho zničení — pokud by daný úkon vedl ke zničení, mechanismus vyhodnocení kroku (behavior tree, viz [2.1.2](#212-řízené-prvky--roboti)) jej vyhodnotí jako neproveditelný a úkon se vůbec neprovede.

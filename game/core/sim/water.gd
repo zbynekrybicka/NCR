@@ -43,7 +43,7 @@ static func reidentify(world: WorldState) -> void:
 	var claimed := {}
 	for i in world.reservoirs.size():
 		var res: ReservoirState = world.reservoirs[i]
-		var component := _component_containing(components, res.anchor)
+		var component := _component_for_reservoir(components, res)
 		if component.is_empty():
 			res.cells = []
 			res.recompute_capacity(func(cell: Vector3i) -> int: return world.block_at(cell))
@@ -65,6 +65,20 @@ static func reidentify(world: WorldState) -> void:
 		for cell in component:
 			world.cell_to_reservoir[world.cell_index(cell)] = i
 		res.recompute_capacity(func(cell: Vector3i) -> int: return world.block_at(cell))
+
+## Najde komponentu, do které nádrž patří. Zkusí nejdřív kotvu; ta ale může
+## přestat držet vodu, aniž by dutina zanikla (Han vysype korbu přesně na
+## kotevní buňku — ta zpevní na hlínu, ale zbytek nádrže zůstává plný vody).
+## V tom případě se hledá podle libovolné buňky, kterou nádrž měla předtím.
+static func _component_for_reservoir(components: Array, res: ReservoirState) -> Array:
+	var component := _component_containing(components, res.anchor)
+	if not component.is_empty():
+		return component
+	for cell in res.cells:
+		component = _component_containing(components, cell)
+		if not component.is_empty():
+			return component
+	return []
 
 static func _component_containing(components: Array, cell: Vector3i) -> Array:
 	for component in components:

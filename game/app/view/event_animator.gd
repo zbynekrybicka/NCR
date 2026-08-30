@@ -14,11 +14,14 @@ const TURN_TIME := 0.25
 ## viz _start_platform_moved().
 const PLATFORM_TIME := 1.0
 
-## Pád puštěného předmětu, který nedosedne hned na podklad ve výšce robota
-## (§11) — nejdřív chvíli visí ve vzduchu, pak padá tempem na kostku pádu,
-## ať nezmizí mimo záběr, když spadne z výšky (postřeh z hraní).
+## Tempo pádu z výšky (§11) — puštěný předmět i Hanem vysypaná kostka hlíny
+## (han_dump.gd), když nedosednou hned na podklad ve výšce, odkud padají.
+const FALL_TIME_PER_CELL := 1.0 / 3.0
+
+## Puštěný předmět navíc nejdřív chvíli visí ve vzduchu, ať nezmizí mimo
+## záběr, než se rozpadne (postřeh z hraní) — kostka hlíny žádný hang nemá,
+## padá rovnou.
 const ITEM_FALL_HANG_TIME := 1.0 / 3.0
-const ITEM_FALL_TIME_PER_CELL := 1.0 / 3.0
 
 ## Klipy uvnitř modelu robota podle substepu (§6.4). Bere se první, který
 ## model doopravdy má — kdo klip nemá, se jen posune. Krok po šikmině je pořád
@@ -63,6 +66,13 @@ var _platform_parts: Array = []
 ## Délka viditelného "postátí" ve vzduchu před pádem — jen `_mode == "item_fall"`
 ## (viz _start_item_dropped()), jinde beze smyslu.
 var _item_fall_hang: float = 0.0
+
+## Padající kostka (han_dump.gd) žije v MultiMesh, ne jako vlastní uzel —
+## animuje se stejně jako náklad plošiny (_apply_platform_part), jen mimo
+## _platform_parts, protože tu vždy padá nejvýš jedna kostka najednou.
+## Platné jen `_mode == "block_fall"`.
+var _block_mm: MultiMesh
+var _block_mm_index: int = -1
 
 ## Aktuální náklon (§1.1.4) podle indexu robota — mimo šplhání Neta zůstává
 ## u všech na 0.0 a slovník se pro ně nikdy nezaplní.
@@ -120,6 +130,11 @@ func _process(delta: float) -> void:
 			var fall_ratio := (_elapsed - _item_fall_hang) / fall_duration
 			_node.position = _from.lerp(_to, clamp(fall_ratio, 0.0, 1.0))
 		return
+	if _mode == "block_fall":
+		if is_instance_valid(_block_mm):
+			_block_mm.set_instance_transform(_block_mm_index,
+					Transform3D(Basis.IDENTITY, _from.lerp(_to, ratio)))
+		return
 	if _node != null and is_instance_valid(_node):
 		_node.position = _from.lerp(_to, ratio)
 		_node.rotation.y = lerp_angle(_from_yaw, _to_yaw, ratio)
@@ -139,6 +154,16 @@ func _finish_current() -> void:
 		_mode = ""
 		_playing = false
 		_node = null
+		return
+	if _mode == "block_fall":
+		if is_instance_valid(_block_mm):
+			_block_mm.set_instance_transform(_block_mm_index, Transform3D(Basis.IDENTITY, _to))
+		# Teprve teď kostka doopravdy dosedla — pokud dopadla do vody, hladina
+		# se má zvednout v TENHLE moment, ne už při odhození (§9.3, §11).
+		view.refresh_water()
+		_mode = ""
+		_playing = false
+		_block_mm = null
 		return
 	if _node != null and is_instance_valid(_node):
 		_node.position = _to
@@ -231,12 +256,13 @@ func _start(event: Event) -> bool:
 			if node != null:
 				node.visible = false
 			return false
-		Event.EventType.BLOCK_REMOVED, Event.EventType.BLOCK_PLACED, \
-		Event.EventType.BLOCK_FELL, Event.EventType.ICE_MELTED:
+		Event.EventType.BLOCK_REMOVED, Event.EventType.BLOCK_FELL, Event.EventType.ICE_MELTED:
 			view.refresh_blocks()
 			# Změna geometrie mění kapacitu vrstev, a tím i hladinu (§9.2).
 			view.refresh_water()
 			return false
+		Event.EventType.BLOCK_PLACED:
+			return _start_block_placed(event)
 		Event.EventType.PLATFORM_MOVED:
 			return _start_platform_moved(event)
 		Event.EventType.WATER_VOLUME_CHANGED, Event.EventType.PUMP_TRANSFERRED:
@@ -327,7 +353,7 @@ func _start_platform_moved(event: Event) -> bool:
 ## Puštěný předmět (§11) — `view.refresh_items()` ho už postavil na finální
 ## místo (stejný postup jako _start_platform_moved()), tady se jen dočasně
 ## odtáhne zpátky na `from` a nechá dojet: chvíli visí, pak padá tempem
-## ITEM_FALL_TIME_PER_CELL na kostku pádu. Dosedne-li rovnou ve výšce, odkud
+## FALL_TIME_PER_CELL na kostku pádu. Dosedne-li rovnou ve výšce, odkud
 ## byl puštěn, žádná animace netřeba — vrací false stejně jako beze změny.
 func _start_item_dropped(event: Event) -> bool:
 	view.refresh_items()
@@ -344,7 +370,38 @@ func _start_item_dropped(event: Event) -> bool:
 	_from = WorldView.cell_to_position(from_cell)
 	_node.position = _from
 	_item_fall_hang = ITEM_FALL_HANG_TIME
-	_begin(ITEM_FALL_HANG_TIME + ITEM_FALL_TIME_PER_CELL * distance)
+	_begin(ITEM_FALL_HANG_TIME + FALL_TIME_PER_CELL * distance)
+	return true
+
+## Kostka umístěná blokem (BLOCK_PLACED — Hanovo vysypání korby, Yeovo
+## zmrazení) — `view.refresh_blocks()` ji už postavil do MultiMeshe na
+## finální místo (viz block_multimesh_slot(), stejný postup jako u plošiny).
+## Padá-li o patro a víc (han_dump.gd), dočasně se odtáhne zpátky na `from`
+## a nechá dojet tempem FALL_TIME_PER_CELL na kostku — `view.refresh_water()`
+## se schválně nezavolá hned (viz refresh_blocks()/refresh_water() dvojice u
+## ostatních typů blokových událostí výš), ale až v _finish_current(), aby
+## hladina stoupla přesně v okamžiku dopadu, ne už při odhození (§9.3, §11).
+## Dosedne-li kostka rovnou (Yeo), animace není třeba a hladina se dorovná
+## hned tady stejně jako dřív.
+func _start_block_placed(event: Event) -> bool:
+	view.refresh_blocks()
+	var to_cell: Vector3i = event.data["cell"]
+	var from_cell: Vector3i = event.data["from"]
+	var distance := from_cell.y - to_cell.y
+	if distance <= 0:
+		view.refresh_water()
+		return false
+	var slot := view.block_multimesh_slot(to_cell)
+	if slot.is_empty():
+		view.refresh_water()
+		return false
+	_mode = "block_fall"
+	_block_mm = slot["multimesh"]
+	_block_mm_index = slot["index"]
+	_to = WorldView.cell_to_position(to_cell)
+	_from = WorldView.cell_to_position(from_cell)
+	_block_mm.set_instance_transform(_block_mm_index, Transform3D(Basis.IDENTITY, _from))
+	_begin(FALL_TIME_PER_CELL * distance)
 	return true
 
 ## Cílový náklon pro daný substep (§1.1.4) — jen Net se naklápí, u ostatních

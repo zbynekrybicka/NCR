@@ -466,9 +466,12 @@ func refresh_water() -> void:
 			if depth == GridTypes.WaterDepth.DRY:
 				continue
 			var block := world.block_at(cell)
-			if block != GridTypes.BlockType.EMPTY and block != GridTypes.BlockType.RAMP:
+			if block != GridTypes.BlockType.EMPTY and block != GridTypes.BlockType.RAMP \
+					and block != GridTypes.BlockType.TARGET:
 				continue # led nebo jiný blok na hladině už buňku zabírá vizuálně; šikmina nemá
-				# tvar kostky, takže s hladinou neglitchuje a smí se zobrazit i nad ní
+				# tvar kostky, takže s hladinou neglitchuje a smí se zobrazit i nad ní; cíl se
+				# kreslí jako částice (refresh_targets), takže hladina pod ním musí zůstat vidět
+				# i po odemčení, jinak v ní zeje díra (cíl nikdy nezmění block type na EMPTY)
 			var above: Vector3i = cell + GridTypes.UP_VECTOR
 			if res.has_cell(above) and world.water_depth_at(above) != GridTypes.WaterDepth.DRY:
 				continue # pod hladinou, nezvýrazňovat

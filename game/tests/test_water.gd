@@ -119,6 +119,22 @@ func test_capacity_follows_geometry() -> void:
 	world.set_block(Vector3i(1, 1, 1), GridTypes.BlockType.EMPTY)
 	t.equal(world.reservoirs[0].total_capacity(), 12, "roztátí kapacitu vrátilo")
 
+func test_reidentify_survives_anchor_becoming_solid() -> void:
+	# Han může vysypat korbu přesně na kotevní buňku nádrže — dutina tím
+	# nezaniká, jen o tu jednu buňku přijde (viz nahlášený bug: reidentify
+	# hledal dutinu jen podle kotvy a při jejím zpevnění celou nádrž vynuloval).
+	var world := _basin(6)
+	world.set_block(Vector3i(1, 1, 1), GridTypes.BlockType.DIRT)
+	WaterSystem.reidentify(world)
+	t.equal(world.reservoirs.size(), 1, "nádrž dál existuje")
+	var res: ReservoirState = world.reservoirs[0]
+	t.equal(res.cells.size(), 5, "zpevněná kotva ubyla, zbytek dutiny zůstal")
+	t.equal(res.total_capacity(), 10, "kapacita klesla jen o zpevněnou buňku")
+	t.equal(res.volume_units, 6, "objem vody zůstal zachovaný")
+	t.equal(world.reservoir_at(Vector3i(2, 1, 1)), 0, "sousední buňka pořád patří do nádrže")
+	t.is_true(world.water_depth_at(Vector3i(2, 1, 1)) != GridTypes.WaterDepth.DRY,
+			"voda ve zbytku nádrže zůstala")
+
 func test_floating_ice_raft_detection() -> void:
 	var level := LevelBuilder.new() \
 		.layer(0, "###.") \

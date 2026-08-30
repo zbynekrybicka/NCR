@@ -41,7 +41,8 @@ func apply(world: WorldState, robot_index: int, validation: Validation,
 
 	world.set_block(landing, GridTypes.BlockType.DIRT)
 	robot.hopper_full = false
-	out_events.append(Event.block_placed(landing, GridTypes.BlockType.DIRT))
+	out_events.append(Event.block_placed(landing, GridTypes.BlockType.DIRT,
+			ActionHelpers.behind_cell(world, robot_index)))
 	if reservoir_index != -1:
 		# §9.3: dopad do vody přidává objem a zároveň buňka ztrácí kapacitu
 		# (tu odečte set_block sám). Kapacita i objem viz poznámka k rozporu
