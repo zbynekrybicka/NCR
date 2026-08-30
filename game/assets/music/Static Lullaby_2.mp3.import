@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://deccggsg1v75c"
+path="res://.godot/imported/Static Lullaby_2.mp3-1166f4c64b6c24433a6bfa324fc9afb6.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Static Lullaby_2.mp3"
+dest_files=["res://.godot/imported/Static Lullaby_2.mp3-1166f4c64b6c24433a6bfa324fc9afb6.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

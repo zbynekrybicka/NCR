@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://did6yr7ndi5lp"
+path="res://.godot/imported/Weightless Blue_1.mp3-bb70315e2ea958dcd3521f521ecfd988.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Weightless Blue_1.mp3"
+dest_files=["res://.godot/imported/Weightless Blue_1.mp3-bb70315e2ea958dcd3521f521ecfd988.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

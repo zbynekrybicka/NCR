@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://i0atuvdhlpdc"
+path="res://.godot/imported/Green Earth Pulse_2.mp3-bdd47113578803a8041ff4eac613d86d.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Green Earth Pulse_2.mp3"
+dest_files=["res://.godot/imported/Green Earth Pulse_2.mp3-bdd47113578803a8041ff4eac613d86d.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

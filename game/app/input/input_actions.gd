@@ -16,6 +16,7 @@ const SWITCH_ROBOT := "switch_robot"
 const CAMERA_FIRST_PERSON := "camera_first_person"
 const RESTART_LEVEL := "restart_level"
 const SKIP_ANIMATION := "skip_animation"
+const SWITCH_MUSIC := "switch_music"
 
 ## akce -> seznam kláves (Key)
 const DEFAULTS := {
@@ -31,6 +32,7 @@ const DEFAULTS := {
 	CAMERA_FIRST_PERSON: [KEY_F],
 	RESTART_LEVEL: [KEY_R],
 	SKIP_ANIMATION: [KEY_ESCAPE],
+	SWITCH_MUSIC: [KEY_H],
 }
 
 ## akce -> seznam tlačítek gamepadu (JoyButton)

@@ -12,6 +12,7 @@ var hud: Hud
 var landscape: LandscapeView
 var intro_flight: IntroCameraFlight
 var intro_text_overlay: IntroTextOverlay
+var music: MusicPlayer
 
 var input_locked: bool = false
 
@@ -59,6 +60,10 @@ func setup_with_simulation(p_simulation: Simulation, world_position: Variant = n
 
 	hud = Hud.new()
 	add_child(hud)
+
+	music = MusicPlayer.new()
+	add_child(music)
+	music.start()
 
 	_focus_active_robot()
 	hud.show_state(simulation, "")

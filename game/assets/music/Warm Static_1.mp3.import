@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bffde1pwdk7yw"
+path="res://.godot/imported/Warm Static_1.mp3-c443ae6665335a929485f5bba69f055b.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Warm Static_1.mp3"
+dest_files=["res://.godot/imported/Warm Static_1.mp3-c443ae6665335a929485f5bba69f055b.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
