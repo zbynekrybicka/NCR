@@ -41,6 +41,16 @@ const MOVE_CLIPS := {
 const NET_PITCH_UP := PI / 2.0
 const NET_PITCH_DOWN := -PI / 2.0
 
+## Náklon na šikmině (§2.1.4 design dok.) — mřížka staví šikminu vždy jako
+## přesný poměr 1:1 (1 kostka vpřed = 1 kostka nahoru/dolů), tedy skutečných
+## 45°. Znaménko stejné jako u Neta výš — kladné naklápí příď nahoru.
+const RAMP_PITCH := PI / 4.0
+
+## Nadzvednutí středu robota uprostřed kroku, kde se náklon na/ze šikminy
+## mění (viz `_rounding` a _process()) — vyladěno od oka, klidně uprav podle
+## toho, jak to v enginu vypadá.
+const RAMP_ROUND_BULGE := WorldView.CELL_SIZE * 0.12
+
 var view: WorldView
 var _queue: Array = []
 var _playing: bool = false
@@ -74,9 +84,18 @@ var _item_fall_hang: float = 0.0
 var _block_mm: MultiMesh
 var _block_mm_index: int = -1
 
-## Aktuální náklon (§1.1.4) podle indexu robota — mimo šplhání Neta zůstává
-## u všech na 0.0 a slovník se pro ně nikdy nezaplní.
+## Aktuální náklon (§1.1.4) podle indexu robota — mimo šplhání Neta a chůzi
+## po šikmině zůstává u všech na 0.0 a slovník se pro ně nikdy nezaplní.
 var _pitch: Dictionary = {}
+
+## Platí jen pro aktuálně přehrávanou "single" událost — true, když se v ní
+## náklon skutečně mění (viz _start() u ROBOT_MOVED/ROBOT_TURNED). Robot má
+## osu otáčení zhruba ve svém středu, ne u nohou, takže čistě lineární náklon
+## během přímé chůze na/ze šikminy vypadá, že do ní probořuje nebo se nad ní
+## vznáší. Vyhlazená (smoothstep) dráha + mírné nadzvednutí uprostřed kroku
+## (viz _process()) tomu opticky brání. Netova šplhání po zdi se netýká —
+## tam se současné lineární chování nemění.
+var _rounding: bool = false
 
 ## Řetěz šikmin dolů (vícepatrové schodiště, viz _start) — dokud
 ## `_ramp_chain_robot` sedí na aktuálním robotovi, jede se svah, který
@@ -136,9 +155,16 @@ func _process(delta: float) -> void:
 					Transform3D(Basis.IDENTITY, _from.lerp(_to, ratio)))
 		return
 	if _node != null and is_instance_valid(_node):
-		_node.position = _from.lerp(_to, ratio)
 		_node.rotation.y = lerp_angle(_from_yaw, _to_yaw, ratio)
-		_node.rotation.x = lerp_angle(_from_pitch, _to_pitch, ratio)
+		if _rounding:
+			# Zaoblení přechodu na/ze šikminy — viz `_rounding` výš.
+			var eased := ratio * ratio * (3.0 - 2.0 * ratio)
+			_node.position = _from.lerp(_to, eased)
+			_node.position.y += RAMP_ROUND_BULGE * sin(PI * ratio)
+			_node.rotation.x = lerp_angle(_from_pitch, _to_pitch, eased)
+		else:
+			_node.position = _from.lerp(_to, ratio)
+			_node.rotation.x = lerp_angle(_from_pitch, _to_pitch, ratio)
 
 func _finish_current() -> void:
 	if _mode == "platform":
@@ -213,6 +239,11 @@ func _start(event: Event) -> bool:
 			_from_pitch = _pitch.get(robot_index, 0.0)
 			_to_pitch = _target_pitch(_robot, substep, event.data["to"])
 			_pitch[robot_index] = _to_pitch
+			# Šplhání Neta si vystačí s dosavadním lineárním náklonem beze
+			# změny (viz `_rounding` výš) — týká se jen chůze po šikmině.
+			_rounding = not is_equal_approx(_from_pitch, _to_pitch) \
+					and substep != GridTypes.Substep.UP_VERTICAL \
+					and substep != GridTypes.Substep.DOWN_VERTICAL
 			if substep == GridTypes.Substep.DOWN_RAMP:
 				if _ramp_chain_robot != robot_index:
 					# První šikmina sjezdu — pád se teprve začíná odkládat.
@@ -234,6 +265,7 @@ func _start(event: Event) -> bool:
 		Event.EventType.ROBOT_TURNED:
 			_mode = "single"
 			_ramp_chain_robot = -1
+			_rounding = false
 			var turned_robot_index := int(event.data["robot"])
 			_node = view.robot_node(turned_robot_index)
 			if _node == null:
@@ -404,9 +436,13 @@ func _start_block_placed(event: Event) -> bool:
 	_begin(FALL_TIME_PER_CELL * distance)
 	return true
 
-## Cílový náklon pro daný substep (§1.1.4) — jen Net se naklápí, u ostatních
-## robotů (i když substep DOWN_VERTICAL sdílí s pádem vlivem gravitace,
-## viz gravity.gd) zůstává 0.0.
+## Cílový náklon pro daný substep (§1.1.4) — šplhání po zdi řeší jen Net
+## (první větev, i když substep DOWN_VERTICAL sdílí s pádem vlivem gravitace,
+## viz gravity.gd), chůzi po šikmině (RAMP_PITCH) sdílený match níž řeší
+## pro kohokoli, kdo po šikmině vůbec chodí. Da po šikminách nikdy nechodí
+## (viz da.json — nemá pro ně žádnou větev), takže se ho druhá větev nikdy
+## netýká. U FORWARD (rovina, včetně dosednutí po šikmině nebo jejím vrcholu)
+## zůstává 0.0.
 ##
 ## Sešplhání nemá zvlášť "dosednutí": strom (net.json, větev `climb_down`)
 ## poslední DOWN_VERTICAL rovnou ukončí přes `below_is_solid` → `succeed`,
@@ -414,15 +450,19 @@ func _start_block_placed(event: Event) -> bool:
 ## kroku, jakmile pod cílovou buňkou už je pevná podlaha — jinak by Net
 ## zůstal viset nakloněný na zdi, i když už fakticky stojí na zemi.
 func _target_pitch(robot: RobotView, substep: int, to_cell: Vector3i) -> float:
-	if robot == null or robot.kind != GridTypes.RobotKind.NET:
-		return 0.0
+	if robot != null and robot.kind == GridTypes.RobotKind.NET:
+		match substep:
+			GridTypes.Substep.UP_VERTICAL:
+				return NET_PITCH_UP
+			GridTypes.Substep.DOWN_VERTICAL:
+				if view.world.has_support_below(to_cell):
+					return 0.0
+				return NET_PITCH_DOWN
 	match substep:
-		GridTypes.Substep.UP_VERTICAL:
-			return NET_PITCH_UP
-		GridTypes.Substep.DOWN_VERTICAL:
-			if view.world.has_support_below(to_cell):
-				return 0.0
-			return NET_PITCH_DOWN
+		GridTypes.Substep.UP_RAMP:
+			return RAMP_PITCH
+		GridTypes.Substep.DOWN_RAMP:
+			return -RAMP_PITCH
 	return 0.0
 
 func _begin(duration: float) -> void:

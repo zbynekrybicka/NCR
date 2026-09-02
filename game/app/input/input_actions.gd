@@ -57,10 +57,11 @@ const COMMAND_FOR := {
 }
 
 ## Akce, které se při podrženém tlačítku po dokončení kroku opakují samy
-## (plynulá chůze/otáčení) — na rozdíl od akcí na jedno stisknutí (interakce,
-## přepnutí robota, restart).
+## (plynulá chůze) — na rozdíl od akcí na jedno stisknutí (otáčení, interakce,
+## přepnutí robota, restart). Otáčení je vždy jen o 90° na jedno stisknutí,
+## i při podrženém tlačítku (§17.4).
 const REPEATABLE := [
-	TURN_LEFT, TURN_RIGHT, TURN_AROUND, STEP, STEP_UP, STEP_DOWN,
+	STEP, STEP_UP, STEP_DOWN,
 ]
 
 static func register_defaults() -> void:
